@@ -22,6 +22,7 @@ PEER_INTELLIGENCE = {
         "ticker": "PG",
         "exchange": "NYSE",
         "geography": "Global",
+        "tier": "global",
         "ai_investment_usd_m": 1200,
         "supply_chain_savings_usd_m": 1500,
         "driver": "AI-powered demand sensing and end-to-end supply chain optimization",
@@ -37,6 +38,7 @@ PEER_INTELLIGENCE = {
         "ticker": "NESN",
         "exchange": "SWX",
         "geography": "Global",
+        "tier": "global",
         "ai_investment_usd_m": 800,
         "tpo_savings_usd_m": 340,
         "nps_uplift_pts": 12,
@@ -52,6 +54,7 @@ PEER_INTELLIGENCE = {
         "ticker": "ULVR",
         "exchange": "LSE",
         "geography": "Global",
+        "tier": "global",
         "ai_investment_usd_m": 1100,
         "driver": "AI-powered demand sensing and personalized digital marketing at scale",
         "payback_months": 21,
@@ -66,6 +69,7 @@ PEER_INTELLIGENCE = {
         "ticker": "KO",
         "exchange": "NYSE",
         "geography": "Global",
+        "tier": "global",
         "ai_investment_usd_m": 600,
         "driver": "AI-powered manufacturing yield optimization and dynamic pricing intelligence",
         "payback_months": 19,
@@ -81,6 +85,7 @@ PEER_INTELLIGENCE = {
         "ticker": "MDLZ",
         "exchange": "NASDAQ",
         "geography": "Global",
+        "tier": "global",
         "ai_investment_usd_m": 450,
         "driver": "AI-driven trade promotion optimization and e-commerce personalization",
         "payback_months": 22,
@@ -95,6 +100,7 @@ PEER_INTELLIGENCE = {
         "ticker": "RKT",
         "exchange": "LSE",
         "geography": "Global",
+        "tier": "global",
         "ai_investment_usd_m": 380,
         "driver": "AI-powered digital shelf analytics and consumer insight platforms",
         "payback_months": 24,
@@ -109,6 +115,7 @@ PEER_INTELLIGENCE = {
         "ticker": "CL",
         "exchange": "NYSE",
         "geography": "Global",
+        "tier": "global",
         "ai_investment_usd_m": 320,
         "driver": "AI-powered pricing intelligence and supply chain automation",
         "payback_months": 20,
@@ -123,6 +130,7 @@ PEER_INTELLIGENCE = {
         "ticker": "BN",
         "exchange": "EPA",
         "geography": "Global",
+        "tier": "global",
         "ai_investment_usd_m": 290,
         "driver": "AI-powered demand forecasting and sustainability-linked waste reduction",
         "payback_months": 22,
@@ -138,6 +146,7 @@ PEER_INTELLIGENCE = {
         "ticker": "MARICO",
         "exchange": "NSE",
         "geography": "India & South Asia",
+        "tier": "regional",
         "ai_investment_usd_m": 45,
         "driver": "AI-powered rural distribution intelligence and secondary sales demand sensing",
         "payback_months": 18,
@@ -152,6 +161,7 @@ PEER_INTELLIGENCE = {
         "ticker": "ITC",
         "exchange": "NSE",
         "geography": "India & South Asia",
+        "tier": "regional",
         "ai_investment_usd_m": 120,
         "driver": "AI-powered agribusiness optimization and FMCG go-to-market intelligence",
         "payback_months": 24,
@@ -184,6 +194,49 @@ INDUSTRY_BENCHMARKS = {
 
     # ── Change management overhead (risk modifier) ──────────────────────────
     "change_mgmt_overhead_pct": 0.08,     # 8% of total budget for structured OCM
+
+    # ── MODEL ASSUMPTIONS ───────────────────────────────────────────────────
+    # Every "magic number" the math engine relies on lives here so it can be
+    # audited, challenged, or re-tuned in ONE place instead of being buried in
+    # code. Each entry names what it represents and where it comes from.
+    "model_assumptions": {
+        # FX: rupee-denominated baselines (cr / lakh) are converted at this rate.
+        "inr_per_usd": 83,
+
+        # Proxy ratios used ONLY when the client gives revenue but not the
+        # specific baseline. CPG-sector norms.
+        "inventory_pct_of_revenue": 0.12,        # inventory ≈ 12% of revenue
+        "addressable_opex_pct_of_revenue": 0.18, # addressable SG&A ≈ 18% of revenue
+
+        # Benefits do not land at full run-rate on day one. This is the % of the
+        # steady-state annual value actually captured in years 1, 2, 3.
+        "value_ramp": [0.40, 0.75, 1.00],
+
+        # Q4.3 — who builds it. An external SI inflates total programme cost;
+        # documented industry drag is 30–40%.
+        "si_cost_inflation": {
+            "external": 0.35,   # External Systems Integrator (SI)
+            "hybrid": 0.15,     # Internal team with SI support
+            "internal": 0.0,    # Fully internal engineering team
+        },
+
+        # Q4.2 — compliance burden inflates the MLOps / governance foundation.
+        "compliance_foundation_uplift": {
+            "strict": 0.08,
+            "moderate": 0.04,
+            "minimal": 0.0,
+            "unknown": 0.04,    # treat unknown as moderate, conservatively
+        },
+
+        # Q2.4 — out-of-stock frequency = recoverable lost sales that demand
+        # sensing can win back, as an extra % of revenue baseline.
+        "oos_revenue_recovery": {
+            "rarely": 0.000,
+            "occasionally": 0.005,
+            "frequently": 0.010,
+            "constantly": 0.015,
+        },
+    },
 
     # ── Primary goal allocation sub-configurations ──────────────────────────
     # Used by math_engine.py to set pillar labels and break down use cases.

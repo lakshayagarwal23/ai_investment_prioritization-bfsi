@@ -57,12 +57,20 @@ SECTIONS: list[dict] = [
 QUESTIONS: list[dict] = [
     # Phase 1: Strategic Mandate
     {
+        "id": "Q0.1", "section": "S1",
+        "text": "What is your primary CPG sub-sector?",
+        "rationale": "Different sub-sectors have fundamentally different value pools. Personalization leads in beauty, while cold-chain and demand sensing dominate food.",
+        "tags": ["Sector Context"],
+        "input_type": "single_select",
+        "options": ["Food & Beverage", "Beauty & Personal Care", "Home & House Care", "Health & OTC", "Other CPG"],
+    },
+    {
         "id": "Q1.1", "section": "S1",
         "text": "What are your company's critical strategic objectives right now? (Select all that apply)",
         "rationale": "Directly determines primary goal allocation and multi-KPI alignment in the financial model.",
         "tags": ["Financial Model"],
         "input_type": "multi_select",
-        "options": ["Grow revenue and market share fast", "Protect our profit margins from rising costs", "Improve customer satisfaction dramatically", "Cut operating expenses", "Make the supply chain bulletproof"],
+        "options": ["Accelerate revenue and market share growth", "Preserve and expand operating margins", "Enhance customer experience and satisfaction", "Optimize operating expenses and efficiency", "Build a resilient and agile supply chain"],
     },
     {
         "id": "Q1.2", "section": "S1",
@@ -196,3 +204,78 @@ def get_section(section_id: str) -> dict | None:
 
 def get_questions_for_section(section_id: str) -> list[dict]:
     return [q for q in QUESTIONS if q["section"] == section_id]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DYNAMIC PER-OBJECTIVE INPUTS  (drives Q1.2)
+# When a user selects a strategic objective in Q1.1, we show a tailored, structured
+# follow-up (category + amount + target) so the engine receives reliable NUMBERS
+# instead of having to parse free text. Keyed by the exact Q1.1 option label.
+# ─────────────────────────────────────────────────────────────────────────────
+OBJECTIVE_INPUTS: dict[str, dict] = {
+    "Accelerate revenue and market share growth": {
+        "engine": "revenue",
+        "category_label": None,
+        "category_options": [],
+        "amount_label": "Current annual revenue (USD M)",
+        "amount_default": 1000,
+        "amount_is_money": True,
+        "target_label": "Target revenue uplift",
+        "target_suffix": "%",
+        "target_max": 30,
+        "target_default": 8,
+    },
+    "Preserve and expand operating margins": {
+        "engine": "margin",
+        "category_label": "Which cost base is under pressure?",
+        "category_options": ["Procurement / COGS", "Logistics & Distribution",
+                             "Manufacturing / Yield", "Trade promotion", "SG&A / Overhead"],
+        "amount_label": "Approx. annual spend on that base (USD M)",
+        "amount_default": 500,
+        "amount_is_money": True,
+        "target_label": "Target cost / margin improvement",
+        "target_suffix": "%",
+        "target_max": 25,
+        "target_default": 5,
+    },
+    "Enhance customer experience and satisfaction": {
+        "engine": "nps",
+        "category_label": "Primary CX metric",
+        "category_options": ["Net Promoter Score (NPS)", "CSAT", "Customer retention %"],
+        "amount_label": "Current score / level",
+        "amount_default": 30,
+        "amount_is_money": False,
+        "target_label": "Target uplift (points)",
+        "target_suffix": " pts",
+        "target_max": 30,
+        "target_default": 10,
+    },
+    "Optimize operating expenses and efficiency": {
+        "engine": "opex",
+        "category_label": "Which operating cost?",
+        "category_options": ["SG&A / Overhead", "Field & sales operations",
+                             "Back-office / Finance", "IT & Technology", "Customer service"],
+        "amount_label": "Current annual cost of that function (USD M)",
+        "amount_default": 300,
+        "amount_is_money": True,
+        "target_label": "Target reduction",
+        "target_suffix": "%",
+        "target_max": 30,
+        "target_default": 8,
+    },
+    "Build a resilient and agile supply chain": {
+        "engine": "supply",
+        "category_label": "Primary supply-chain lever",
+        "category_options": ["Inventory / working capital", "Logistics & freight",
+                             "Demand forecasting", "Procurement"],
+        "amount_label": "Annual inventory or logistics spend (USD M)",
+        "amount_default": 400,
+        "amount_is_money": True,
+        "target_label": "Target reduction",
+        "target_suffix": "%",
+        "target_max": 30,
+        "target_default": 12,
+    },
+}
+
+# Sentinel appended to every select question so a client can supply a custom answer.
+OTHER_OPTION = "Other (please specify)"

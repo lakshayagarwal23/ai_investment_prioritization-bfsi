@@ -1,26 +1,84 @@
 """
 ui/dashboard.py
 
-Right column (65% width) of the AI Investment Advisory Platform.
-Renders an interactive, Palantir/PwC-style Executive Decision Platform.
+Right column of the AI Investment Advisory Platform.
+Renders an interactive, board-ready Executive Decision Report.
+
+Report narrative (the order a board actually reads in):
+  1. Capital-allocation decision      → the recommendation + readiness
+  2. Investment roadmap               → when money is committed, phase by phase
+  3. Strategic AI investment prioritisation      → the "why", in plain English
+  4. Use-case prioritisation          → WHAT to build first (impact × feasibility)
+  5. Strategic investment ledger      → WHERE the money goes + the evidence
+  6. Capital allocation by phase      → how the spend is phased
+  7. AI maturity assessment           → readiness context
+  8. Competitive benchmarking         → sourced peer evidence + transferability
+  9. Risk register & heat map         → what could go wrong + mitigations
 """
 
+import re
+import html
 import streamlit as st
 import plotly.graph_objects as go
 
+from config.peer_corpus import PEER_INTELLIGENCE
+from config.value_pools import (
+    VALUE_TYPE, REVENUE, OPPROFIT, PRODUCTIVITY,
+    COLORS as VT_COLORS, DISPLAY_NAME as VT_DISPLAY,
+    SHORT_LABEL as VT_SHORT, IMPACT_MID, FEAS_MID
+)
 
-def _h(html: str) -> None:
-    flat = " ".join(line.strip() for line in html.splitlines())
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SHARED HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+def _h(html_str: str) -> None:
+    flat = " ".join(line.strip() for line in html_str.splitlines())
     st.markdown(flat, unsafe_allow_html=True)
 
+
+_SCRIPT_RE = re.compile(r"<(script|iframe|object|embed)[^>]*>.*?</\1>", re.I | re.S)
+
+
+def _field(text: str) -> str:
+    """Sanitize model/user text before rendering as HTML.
+    Prevents LaTeX ($ → escaped) and strips injection vectors."""
+    if not text:
+        return ""
+    text = str(text)
+    text = html.escape(text)
+    text = text.replace("$", r"\$")          # prevent Streamlit LaTeX
+    return text
+
+
 def _fmt_usd(val: float) -> str:
-    if val >= 1_000_000: return f"${val / 1_000_000:.1f}M"
-    if val >= 1_000: return f"${val / 1_000:.0f}K"
-    return f"${val:,.0f}"
+    if val >= 1_000_000:
+        return f"&#36;{val / 1_000_000:.1f}M"
+    if val >= 1_000:
+        return f"&#36;{val / 1_000:.0f}K"
+    return f"&#36;{val:,.0f}"
+
 
 def _fmt_pct(val: float) -> str:
     return f"{val:.1f}%"
 
+
+def _section_title(title: str, sub: str | None = None) -> None:
+    """One consistent, serif section header used across the whole report."""
+    html = f'<div class="aia-sec-title">{title}</div>'
+    if sub:
+        html += (f'<div style="font-size:12.5px; color:var(--ink-400); '
+                 f'margin:-10px 0 16px; line-height:1.5;">{sub}</div>')
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def _plotly_font() -> dict:
+    return {"family": "Arial, Helvetica, sans-serif", "color": "#4A525C", "size": 12}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PENDING / LEGEND
+# ─────────────────────────────────────────────────────────────────────────────
 def render_pending_state() -> None:
     st.html("""
     <div class="aia-pending">
@@ -29,656 +87,884 @@ def render_pending_state() -> None:
         </div>
         <div class="aia-pending-title">Executive Decision Engine Pending</div>
         <div class="aia-pending-sub">
-            Complete the discovery flow to generate
-            a fully quantified, interactive AI investment decision matrix.
+            Complete the discovery flow to generate a fully quantified,
+            interactive AI investment decision report.
         </div>
     </div>
     """)
 
+
+def render_how_to_read() -> None:
+    """Plain-English legend so a board reader knows the vocabulary."""
+    with st.expander("How to read this report"):
+        _h("""
+        <div style="font-size:13px; color:var(--ink-600); line-height:1.85;">
+        <b>Value types</b> — initiatives are classified into three canonical CPG pools: Revenue generation (green), Operating-profit enhancement (blue), and Productivity & scaling (amber).<br>
+        <b>Phased funding</b> — the budget is committed in stages, not all at once.<br>
+        <b>Phase 1 / 2 / 3</b> — the three stages of the programme.
+        <b>Only Phase 1 is committed now</b>; later phases are provisional.<br>
+        <b>Phase Validation</b> — a go / no-go review at the end of a phase. Later funding is released
+        <i>only</i> if the phase requirements are validated.<br>
+        <b>Allocation</b> — share of your budget assigned to this initiative, weighted by its priority and technical feasibility.<br>
+        <b>Technical Feasibility</b> — proportion of each initiative deliverable given data quality, tech-debt and execution risk.<br>
+        <b>Transferability</b> — how much of a peer's disclosed gain is plausibly attainable for you.
+        </div>
+        """)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 1 · DECISION BANNER  (R1 — qualitative tiles only, no financial projections)
+# ─────────────────────────────────────────────────────────────────────────────
 def render_decision_banner(payload: dict, plan: dict) -> None:
     dec = payload.get("executive_decision", {})
-    action = dec.get("action", "PHASED APPROVAL").upper()
-    investment = dec.get("initial_investment", "USD 30M")
-    milestone = dec.get("milestone", "Month 12: Value demonstrated")
-    next_steps = dec.get("next_steps", "Evaluate Gate 2")
-    conf = dec.get("confidence_score", 70)
-    conds = dec.get("conditions", [])
-    
-    color = "#FFB600"
-    if "DELAY" in action or "REJECT" in action:
-        color = "#D63031"
-    elif "APPROVE" in action or "APPROVAL" in action:
-        color = "#00B894"
-    
-    html = f"""
-    <div style="background: {color}15; border: 1px solid {color}; border-radius: 12px; padding: 24px; margin-bottom: 30px;">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px;">
+    action = plan.get("posture", dec.get("action", "PHASED START RECOMMENDED")).upper()
+    # Posture-aware milestone and label text
+    if "ADDRESS FOUNDATIONS FIRST" in plan.get("posture", ""):
+        default_milestone = "Phase 1 Validation: data-readiness & baseline review"
+        default_next = "Begin with the top-ranked prime candidates; release further funding only on Phase 1 Validation pass."
+        risk_label = "Primary Risk to Manage"
+    elif "INVEST NOW" in plan.get("posture", ""):
+        default_milestone = "Phase 1 Delivery: data platform build & first AI pilot deployment"
+        default_next = "Commence Phase 1 foundation build in parallel with detailed scoping of the highest-priority AI initiatives."
+        risk_label = "Key Execution Consideration"
+    else:
+        default_milestone = "Phase 1 Validation: data-readiness & baseline review"
+        default_next = "Commence Phase 1 foundation build in parallel with detailed scoping of the highest-priority AI initiatives."
+        risk_label = "Primary Risk to Manage"
+    milestone = _field(dec.get("milestone", default_milestone))
+    next_steps = _field(dec.get("next_steps", default_next))
+    conds = [_field(c) for c in dec.get("conditions", [])]
+
+    # R1: three posture tiers drive the colour
+    if "ADDRESS FOUNDATIONS FIRST" in action:
+        color = "#D0342C"   # red  — must fix data estate before scaling AI
+    elif "MANAGE EXECUTION RISK" in action:
+        color = "#E8A317"   # amber — proceed carefully
+    else:
+        color = "#1B9C6B"   # green — proceed
+
+    # R1: qualitative tiles (no financial projections — G0.1)
+    readiness_tier  = _field(dec.get("readiness_tier", plan.get("maturity_class", "Emerging")))
+    top_initiatives = dec.get("top_initiatives", [])
+    top_init        = _field(top_initiatives[0] if top_initiatives else "Foundations first")
+    primary_risk    = _field(plan.get("primary_risk", dec.get("primary_risk", "No major flags identified")))
+
+    html_str = f"""
+    <div style="background:var(--white); border:1px solid var(--ink-200); border-top:3px solid var(--brand);
+                border-radius:8px; padding:24px; margin-bottom:16px; box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px;">
             <div>
-                <div style="font-size: 11px; font-weight: 700; color: {color}; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px;">CAPITAL ALLOCATION DECISION</div>
-                <div style="font-size: 24px; font-weight: 800; color: var(--pwc-black);">{action}</div>
-            </div>
-            <div style="text-align: right;">
-                <div style="font-size: 11px; font-weight: 700; color: var(--grey-400); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px;">System Confidence</div>
-                <div style="font-size: 32px; font-weight: 900; color: var(--pwc-black); line-height: 1;">{conf}/100</div>
+                <div style="font-size:11px; font-weight:700; color:var(--ink-400); letter-spacing:0.12em;
+                            text-transform:uppercase; margin-bottom:8px;">Capital Allocation Posture</div>
+                <div style="font-size:26px; font-weight:800; color:var(--ink-900); font-family:Georgia,serif;">{action}</div>
             </div>
         </div>
         
-        <div style="display: flex; gap: 16px; background: rgba(255,255,255,0.6); padding: 16px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.05);">
-            <div style="flex: 1; border-right: 1px solid rgba(0,0,0,0.1); padding-right: 16px;">
-                <div style="font-size: 11px; font-weight: 700; color: var(--grey-text); text-transform: uppercase; margin-bottom: 4px;">Initial Investment</div>
-                <div style="font-size: 16px; font-weight: 600; color: var(--pwc-black);">{investment}</div>
+        <div style="display:flex; gap:16px; background:var(--ink-50); padding:16px;
+                    border-radius:6px; border:1px solid var(--ink-150);">
+            <div style="flex:1; border-right:1px solid rgba(0,0,0,0.08); padding-right:16px;">
+                <div style="font-size:10.5px; font-weight:700; color:var(--ink-500); text-transform:uppercase;
+                            letter-spacing:0.05em; margin-bottom:4px;">{risk_label}</div>
+                <div style="font-size:14px; font-weight:600; color:var(--ink-900);">{primary_risk}</div>
             </div>
-            <div style="flex: 1; border-right: 1px solid rgba(0,0,0,0.1); padding-right: 16px;">
-                <div style="font-size: 11px; font-weight: 700; color: var(--grey-text); text-transform: uppercase; margin-bottom: 4px;">Gate 1 Milestone</div>
-                <div style="font-size: 14px; font-weight: 600; color: var(--pwc-black);">{milestone}</div>
+            <div style="flex:1; border-right:1px solid rgba(0,0,0,0.08); padding-right:16px;">
+                <div style="font-size:10.5px; font-weight:700; color:var(--ink-500); text-transform:uppercase;
+                            letter-spacing:0.05em; margin-bottom:4px;">Phase 1 Deliverable</div>
+                <div style="font-size:14px; font-weight:600; color:var(--ink-900);">{milestone}</div>
             </div>
-            <div style="flex: 1;">
-                <div style="font-size: 11px; font-weight: 700; color: var(--grey-text); text-transform: uppercase; margin-bottom: 4px;">Next Steps</div>
-                <div style="font-size: 14px; font-weight: 600; color: var(--pwc-black);">{next_steps}</div>
+            <div style="flex:1.5;">
+                <div style="font-size:10.5px; font-weight:700; color:var(--ink-500); text-transform:uppercase;
+                            letter-spacing:0.05em; margin-bottom:4px;">Next Steps</div>
+                <div style="font-size:14px; font-weight:600; color:var(--ink-900);">{next_steps}</div>
             </div>
         </div>
     """
-    
+
     scoring_matrix = plan.get("scoring_matrix", [])
-    high_priority = [uc for uc in scoring_matrix if uc.get("priority") == "High"]
-    
+    if plan.get("posture") == "ADDRESS FOUNDATIONS FIRST":
+        high_priority = scoring_matrix[:3]
+    else:
+        # Fix 5: Show ALL funded use cases, not just High tier
+        high_priority = [uc for uc in scoring_matrix if uc.get("priority") in {"High", "Medium"}]
+
+    # Fix 8: SI premium note
+    si_inflation = plan.get("si_inflation", 0.0)
+    si_cost = plan.get("si_cost", 0.0)
+    si_note = ""
+    if si_inflation > 0:
+        si_pct = int(round(si_inflation * 100))
+        si_note = (f'<div style="margin-top:16px; padding:10px 16px; background:var(--ink-50); '
+                   f'border:1px solid var(--ink-150); border-radius:6px; font-size:12px; color:var(--ink-600);'
+                   f' line-height:1.5;">'
+                   f'<strong>Note:</strong> A {si_pct}% Systems Integrator delivery premium '
+                   f'({_fmt_usd(si_cost)}) applies on top of the stated budget envelope '
+                   f'based on the current delivery model selection.</div>')
+
     if high_priority or conds:
-        html += '<div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(0,0,0,0.1); display: flex; gap: 24px;">'
-        
+        html_str += '<div style="margin-top:20px; padding-top:16px; border-top:1px solid rgba(0,0,0,0.08); display:flex; gap:24px;">'
         if high_priority:
-            html += '<div style="flex: 1;">'
-            html += '<div style="font-size: 12px; font-weight: 600; color: var(--pwc-black); margin-bottom: 8px;">Top Recommended Use Cases:</div>'
-            html += '<ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #4A4A4A;">'
-            for uc in high_priority[:3]:
-                html += f"<li><strong>{uc['name']}</strong> (Score: {uc['composite_score']})</li>"
-            html += '</ul></div>'
-            
+            title_text = "Highest-priority once validated" if plan.get("posture") == "ADDRESS FOUNDATIONS FIRST" else "Recommended Initiatives"
+            html_str += f'<div style="flex:1;"><div style="font-size:12px; font-weight:700; color:var(--ink-900); margin-bottom:8px;">{title_text}</div>'
+            html_str += '<ul style="margin:0; padding-left:18px; font-size:13px; color:var(--ink-600); line-height:1.7;">'
+            for uc in high_priority[:6]:
+                if plan.get("posture") == "ADDRESS FOUNDATIONS FIRST":
+                    tier_label = "Highest-priority once validated"
+                else:
+                    tier_label = "Accelerate" if uc.get("priority") == "High" else "Sequence"
+                html_str += f"<li><strong>{_field(uc['name'])}</strong> \u2014 {tier_label} \u00b7 {_field(uc.get('rationale',''))}</li>"
+            html_str += '</ul></div>'
         if conds:
-            html += '<div style="flex: 1;">'
-            html += '<div style="font-size: 12px; font-weight: 600; color: var(--pwc-black); margin-bottom: 8px;">Required Conditions for Success:</div>'
-            html += '<ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #4A4A4A;">'
+            html_str += '<div style="flex:1;"><div style="font-size:12px; font-weight:700; color:var(--ink-900); margin-bottom:8px;">Conditions for Success</div>'
+            html_str += '<ul style="margin:0; padding-left:18px; font-size:13px; color:var(--ink-600); line-height:1.7;">'
             for c in conds:
-                html += f"<li>{c}</li>"
-            html += '</ul></div>'
-            
-        html += '</div>'
-    html += '</div>'
-    _h(html)
+                html_str += f"<li>{c}</li>"
+            html_str += '</ul></div>'
+        html_str += '</div>'
+    html_str += si_note
+    html_str += '</div>'
+    _h(html_str)
 
-def render_executive_summary(payload: dict) -> None:
-    summary = payload.get("executive_summary", "")
-    if summary:
-        # Escape any rogue dollar signs to prevent Streamlit from attempting to render them as LaTeX Math
-        summary = summary.replace("$", r"\$")
+    # H1: state the no-returns principle explicitly (spec requirement)
+    _h("""
+    <div style="background:var(--ink-50); border:1px solid var(--ink-150); border-radius:8px;
+                padding:14px 18px; margin-bottom:20px; font-size:12.5px; color:var(--ink-600);
+                line-height:1.6; font-style:italic;">
+        This tool deliberately does not project ROI or payback — those depend on execution specifics
+        beyond a diagnostic. It prioritises where to invest first and how to stage the spend,
+        against peer evidence.
+    </div>
+    """)
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2 · INVESTMENT ROADMAP (phase timeline)
+# ─────────────────────────────────────────────────────────────────────────────
+def render_phase_timeline(plan: dict) -> None:
+    phases = plan.get("phases", [])
+    if not phases:
+        return
+    
+    foundations_first = plan.get("posture") == "ADDRESS FOUNDATIONS FIRST"
+    _section_title("Investment Roadmap",
+                   "Only Phase 1 is committed today \u2014 each later phase requires preceding phase delivery." if foundations_first else "Proposed staging for capital allocation.")
+    
+    palette = ["#D04A02", "#1F6FEB", "#1B9C6B"]
+    cols = st.columns(len(phases))
+    for i, (col, ph) in enumerate(zip(cols, phases)):
+        color = palette[i % len(palette)]
+        phase_gate = ph.get("gate") or "—"
+        gate_txt = phase_gate if phase_gate and phase_gate != "—" else "Programme complete"
         
-        st.markdown('<div style="background: var(--white); border: 1px solid var(--grey-border); border-radius: 12px; padding: 24px; box-shadow: var(--shadow-sm); margin-bottom: 30px;">', unsafe_allow_html=True)
-        st.markdown('<div style="font-size: 18px; font-weight: 700; color: var(--pwc-black); margin-bottom: 12px;">Strategic Investment Thesis</div>', unsafe_allow_html=True)
-        st.markdown(f'<div style="font-size: 14px; color: #4A4A4A; line-height: 1.6;">\n\n{summary}\n\n</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-
-def render_maturity_gauge(payload: dict) -> None:
-    """Render AI Maturity as a visually striking gauge chart with tier markers."""
-    mat = payload.get("maturity_index", {})
-    score = mat.get("score", 50)
-    classification = mat.get("classification", "Emerging")
-    summary = mat.get("summary", "")
-
-    st.markdown('<div style="font-size: 18px; font-weight: 700; color: var(--pwc-black); margin-bottom: 16px;">AI Maturity Assessment</div>', unsafe_allow_html=True)
-
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        # Gauge chart
-        fig = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=score,
-            number={"font": {"size": 52, "color": "#2D2D2D"}},
-            gauge={
-                "axis": {"range": [0, 100], "tickwidth": 1, "tickcolor": "#E0E0E0"},
-                "bar": {"color": "#D04A02", "thickness": 0.3},
-                "bgcolor": "rgba(0,0,0,0)",
-                "steps": [
-                    {"range": [0, 25], "color": "rgba(214, 48, 49, 0.2)", "name": "Laggard"},
-                    {"range": [25, 50], "color": "rgba(255, 182, 0, 0.2)", "name": "Emerging"},
-                    {"range": [50, 75], "color": "rgba(0, 184, 148, 0.2)", "name": "Strategic"},
-                    {"range": [75, 100], "color": "rgba(0, 150, 255, 0.2)", "name": "Leader"},
-                ],
-                "threshold": {
-                    "line": {"color": "#D04A02", "width": 4},
-                    "thickness": 0.8,
-                    "value": score,
-                },
-            },
-        ))
-        fig.update_layout(
-            margin=dict(l=20, r=20, t=40, b=10),
-            height=220,
-            paper_bgcolor="rgba(0,0,0,0)",
-            font={"family": "Inter, sans-serif"},
-        )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-    with c2:
-        tier_color = {"Laggard": "#D63031", "Emerging": "#FFB600", "Strategic": "#00B894", "Leader": "#0096FF"}
-        color = tier_color.get(classification, "#FFB600")
-        tiers_html = ""
-        for tier, (lo, hi) in [("Laggard", (0, 25)), ("Emerging", (25, 50)), ("Strategic", (50, 75)), ("Leader", (75, 100))]:
-            is_active = tier == classification
-            tc = tier_color[tier]
-            opacity = "1" if is_active else "0.35"
-            border = f"2px solid {tc}" if is_active else "1px solid #E0E0E0"
-            bg = f"{tc}15" if is_active else "transparent"
-            tiers_html += f'<div style="opacity:{opacity}; border:{border}; background:{bg}; border-radius:8px; padding:8px 12px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;"><span style="font-size:13px; font-weight:600; color:{tc};">{tier}</span><span style="font-size:11px; color:var(--grey-400);">{lo}–{hi}</span></div>'
-        _h(f"""
-        <div style="padding: 12px 0;">
-            <div style="font-size: 12px; font-weight: 700; color: var(--grey-400); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px;">Classification: <span style="color:{color};">{classification}</span></div>
-            {tiers_html}
-            <div style="font-size: 13px; color: #4A4A4A; line-height: 1.5; margin-top: 12px; padding-top: 10px; border-top: 1px solid #E0E0E0;">{summary}</div>
-        </div>
-        """)
-    st.html('<div style="height: 20px;"></div>')
-
-def render_interactive_financial_model(plan: dict) -> None:
-    st.markdown('<div style="font-size: 18px; font-weight: 700; color: var(--pwc-black); margin-bottom: 16px;">Scenario-Based Financial Model</div>', unsafe_allow_html=True)
-    
-    # Sliders for interactive assumptions
-    c1, c2 = st.columns(2)
-    with c1:
-        roi_adj = st.slider("Expected ROI Adjustment (%)", min_value=-50, max_value=100, value=0, step=5, help="Stress-test the baseline ROI assumption.")
-    with c2:
-        delay_mo = st.slider("Execution Delay (Months)", min_value=0, max_value=12, value=0, step=1, help="Model the impact of delayed implementation.")
-    
-    # Math logic for scenarios
-    budget_m = plan["budget_usd_m"]
-    base_roi_pct = plan["expected_roi_pct"] + roi_adj
-    base_npv = budget_m * (base_roi_pct / 100.0)
-    
-    months = list(range(0, 37, 3))
-    
-    def generate_cash_flow(npv_target, delay, curve_speed):
-        cf = [-budget_m]
-        current = -budget_m
-        for m in months[1:-1]:
-            if m <= delay:
-                current -= (budget_m * 0.05) # burn rate during delay
-            else:
-                current += (npv_target - current) * curve_speed
-            cf.append(current)
-        cf[-1] = npv_target
-        return cf
-
-    cf_base = generate_cash_flow(base_npv, delay_mo, 0.25)
-    cf_cons = generate_cash_flow(base_npv * 0.6, delay_mo + 3, 0.15)
-    cf_opt = generate_cash_flow(base_npv * 1.3, max(0, delay_mo - 3), 0.35)
-
-    fig = go.Figure()
-    
-    # Optimistic
-    fig.add_trace(go.Scatter(x=[f"M{m}" for m in months], y=cf_opt, mode="lines", name="Optimistic", line=dict(color="#00B894", width=2, dash="dash"), hovertemplate="$%{y:.1f}M"))
-    # Base
-    fig.add_trace(go.Scatter(x=[f"M{m}" for m in months], y=cf_base, mode="lines", name="Base Case", line=dict(color="#FF5A00", width=4), hovertemplate="$%{y:.1f}M"))
-    # Conservative
-    fig.add_trace(go.Scatter(x=[f"M{m}" for m in months], y=cf_cons, mode="lines", name="Conservative", line=dict(color="#D63031", width=2, dash="dot"), hovertemplate="$%{y:.1f}M"))
-    
-    # Breakeven line
-    fig.add_hline(y=0, line_dash="solid", line_color="rgba(0,0,0,0.2)")
-
-    # Find payback month for base case
-    payback_m = "N/A"
-    for i, v in enumerate(cf_base):
-        if v >= 0:
-            payback_m = f"M{months[i]}"
-            fig.add_vline(x=payback_m, line_dash="dash", line_color="#FF5A00")
-            fig.add_annotation(x=payback_m, y=1, yref="paper", text="Base Payback", showarrow=False, xanchor="left", yanchor="bottom", font=dict(color="#FF5A00"))
-            break
-
-    fig.update_layout(
-        margin=dict(l=0, r=0, t=10, b=0),
-        height=350,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        xaxis=dict(showgrid=True, gridcolor="rgba(0,0,0,0.04)"),
-        yaxis=dict(showgrid=True, gridcolor="rgba(0,0,0,0.04)", tickprefix="$", ticksuffix="M")
-    )
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    
-    st.html('<div style="height: 30px;"></div>')
-
-def render_five_gates(payload: dict) -> None:
-    st.markdown('<div style="font-size: 18px; font-weight: 700; color: var(--pwc-black); margin-bottom: 16px;">Five-Gate Readiness Assessment</div>', unsafe_allow_html=True)
-    gates = payload.get("five_gates", {})
-    
-    tabs = st.tabs(["01 Business Case", "02 Feasibility", "03 Prioritization", "04 Governance", "05 Validation"])
-    
-    keys = ["business_case", "feasibility", "prioritization", "governance", "validation"]
-    for i, key in enumerate(keys):
-        with tabs[i]:
-            g = gates.get(key, {})
-            score = g.get("score", 0)
-            status = g.get("status", "AMBER")
-            color_map = {"GREEN": "#00B894", "AMBER": "#FFB600", "RED": "#D63031"}
-            color = color_map.get(status.upper(), "#FFB600")
+        usd_val = _fmt_usd(ph['usd'])
+        if foundations_first and i > 0:
+            usd_str = f'{usd_val} <br><span style="font-size: 13px; font-weight: normal; color: var(--ink-500);">(Pending Phase 1 Delivery)</span>'
+        else:
+            usd_str = usd_val
             
-            c1, c2 = st.columns([1, 2])
-            with c1:
-                _h(f"""
-                <div style="text-align: center; padding: 20px; background: {color}10; border-radius: 12px; border: 1px solid {color}40;">
-                    <div style="font-size: 48px; font-weight: 900; color: {color}; line-height: 1;">{score}</div>
-                    <div style="font-size: 12px; font-weight: 700; color: {color}; text-transform: uppercase; letter-spacing: 0.1em; margin-top: 8px;">{status}</div>
-                </div>
-                """)
-                if g.get("breakdown"):
-                    st.markdown("<div style='font-size: 12px; font-weight: 600; margin-top: 16px; margin-bottom: 8px;'>Scoring Breakdown</div>", unsafe_allow_html=True)
-                    for k, v in g["breakdown"].items():
-                        _h(f"""
-                        <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
-                            <span style="color: #4A4A4A;">{k}</span>
-                            <span style="font-weight: 600;">{v}/100</span>
-                        </div>
-                        <div style="width: 100%; height: 4px; background: var(--grey-100); border-radius: 2px; margin-bottom: 12px;">
-                            <div style="width: {v}%; height: 100%; background: var(--grey-400); border-radius: 2px;"></div>
-                        </div>
-                        """)
-            with c2:
-                if g.get("drivers"):
-                    st.markdown("**Key Drivers**")
-                    for d in g["drivers"]:
-                        st.markdown(f"- {d}")
-                if g.get("recommendations"):
-                    st.markdown("**Improvement Recommendations**")
-                    for r in g["recommendations"]:
-                        st.markdown(f"- {r}")
+        with col:
+            _h(f"""
+            <div style="border:1px solid var(--ink-150); border-top:3px solid {color};
+                        background:var(--white); border-radius:10px; padding:18px; min-height:212px;
+                        box-shadow:var(--sh-sm);">
+              <div style="font-size:10.5px; font-weight:700; color:{color}; text-transform:uppercase;
+                          letter-spacing:0.06em;">{ph['window']}</div>
+              <div style="font-size:15px; font-weight:800; color:var(--ink-900); margin:5px 0 8px;">{ph['name']}</div>
+              <div style="font-size:24px; font-weight:800; color:var(--ink-900); margin-bottom:10px;">{usd_str}</div>
+              <div style="font-size:12px; color:var(--ink-600); line-height:1.55; margin-bottom:12px;">{ph['focus']}</div>
+              <div style="font-size:11px; color:var(--ink-400); border-top:1px solid var(--ink-150);
+                          padding-top:8px;"><b>Next step:</b> {gate_txt}</div>
+            </div>
+            """)
+    st.html('<div style="height: 8px;"></div>')
 
-    st.html('<div style="height: 30px;"></div>')
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 3 · STRATEGIC AI INVESTMENT PRIORITISATION
+# ─────────────────────────────────────────────────────────────────────────────
+def render_executive_summary(payload: dict) -> None:
+    pass # Removed per PwC/FANG design requirements
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 3.5 · VALUE PORTFOLIO (Framework 2)
+# ─────────────────────────────────────────────────────────────────────────────
+def render_value_portfolio(plan: dict) -> None:
+    vp = plan.get("value_portfolio")
+    if not vp:
+        return
+        
+    _section_title("Value-Pool Portfolio", "Planned mix once Phase 1 unlocks funding." if plan.get("posture") == "ADDRESS FOUNDATIONS FIRST" else "Where capital is directed across the three canonical CPG value pools.")
+    
+    # Alignment strip
+    align_pct = vp["aligned_pct"]
+    if align_pct >= 80:
+        strip_class = "aia-align-strip--green"
+        icon = "✓"
+    elif align_pct >= 60:
+        strip_class = "aia-align-strip--amber"
+        icon = "⚠"
+    else:
+        strip_class = "aia-align-strip--red"
+        icon = "✕"
+        
+    _h(f'<div class="aia-align-strip {strip_class}" style="margin-bottom:20px;">'
+       f'{icon} {vp["alignment_sentence"]}</div>')
+
+    pct = vp["pct"]
+    usd = vp["usd"]
+    
+    # KPI Cards using Streamlit columns
+    counts = {REVENUE: 0, OPPROFIT: 0, PRODUCTIVITY: 0}
+    for r in plan.get("ledger_rows", []):
+        if r.get("pillar") == "Value Initiative":
+            vt = r.get("value_type", PRODUCTIVITY)
+            if vt in counts:
+                counts[vt] += 1
+                
+    kpi_cols = st.columns(3)
+    kpis_data = [(REVENUE, "revenue", "#3B6D11"), (OPPROFIT, "opprofit", "#185FA5"), (PRODUCTIVITY, "productivity", "#BA7517")]
+    
+    for i, (vt, tag_class, top_color) in enumerate(kpis_data):
+        with kpi_cols[i]:
+            empty_style = "opacity: 0.5;" if pct[vt] == 0 else ""
+            _h(f"""
+            <div style="border-radius: 8px; border: 1px solid var(--ink-150);
+                        padding: 18px 20px; background: var(--white);
+                        border-top: 3px solid {top_color}; box-shadow: 0 2px 8px rgba(0,0,0,0.03); {empty_style}">
+                <div style="font-size:10.5px; font-weight:700; color:var(--ink-500); letter-spacing:0.06em; text-transform:uppercase; margin-bottom:12px; display:flex; align-items:center; gap:6px;">
+                    <span style="display:inline-block; width:16px; height:16px; border-radius:50%; background:{top_color}; color:#fff; font-size:10px; text-align:center; line-height:16px;">{VT_SHORT[vt]}</span>
+                    {VT_DISPLAY[vt]}
+                </div>
+                <div style="font-size:28px; font-weight:800; color:var(--ink-900); font-family:Arial,sans-serif; margin-bottom:2px; line-height:1;">{pct[vt]}%</div>
+                <div style="font-size:14px; font-weight:700; color:var(--ink-600); margin-bottom:8px;">{_fmt_usd(usd[vt])}</div>
+                <div style="font-size:11.5px; color:var(--ink-400); line-height:1.4;">Share of deployable capital targeting {VT_DISPLAY[vt].lower()} plays.</div>
+                <div style="font-size:11px; font-weight:700; color:var(--ink-900); margin-top:12px; padding-top:12px; border-top:1px solid var(--ink-100);">{counts[vt]} initiative{'s' if counts[vt] != 1 else ''} recommended</div>
+            </div>
+            """)
+    st.html('<div style="height: 4px;"></div>')
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4 · USE-CASE PRIORITISATION MATRIX  (G0.3 + M3 — TIER map drives all surfaces)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Single source of truth for tier labels + colours (G0.3).
+# Both bubble and table Action column read from this map.
+TIER: dict[str, tuple[str, str]] = {
+    "High":   ("Accelerate", "#1B9C6B"),
+    "Medium": ("Sequence",   "#E8A317"),
+    "Watch":  ("Defer",      "#D0342C"),
+}
+
+
+def _band(score: float) -> str:
+    """Convert a 0-100 score to a qualitative band label (M3)."""
+    if score >= 75:
+        return "High"
+    if score >= 55:
+        return "Medium"
+    return "Low"
 
 
 def render_use_case_prioritization(plan: dict) -> None:
-    """Render a bubble chart for use case prioritization."""
-    st.markdown('<div style="font-size: 18px; font-weight: 700; color: var(--pwc-black); margin-bottom: 16px;">Use Case Prioritization Matrix</div>', unsafe_allow_html=True)
-
+    _section_title("Use-Case Prioritisation",
+                   "Where to deploy first — business impact vs. delivery feasibility. "
+                   "Bubble size reflects funded allocation; deferred items are outlined.")
+    _h('<div style="font-size:11px; color:var(--ink-400); margin-top:-10px; margin-bottom:12px;"><b>Composite</b> = Impact 40% + Feasibility 25% + Speed 20% + Fit 15%, less an execution-risk discount.</div>')
     scoring = plan.get("scoring_matrix", [])
     if not scoring:
         return
 
-    # Map old priorities to clearer labels for the frontend if needed
-    priority_labels = {"High": "Invest Now", "Medium": "Evaluate", "Watch": "Deprioritize"}
-    colors_map = {"High": "#00B894", "Medium": "#FFB600", "Watch": "#D63031"}
+    # Extract allocations for bubble sizing
+    allocs = {}
+    for r in plan.get("ledger_rows", []):
+        if r.get("pillar") == "Value Initiative":
+            allocs[r["initiative"]] = r["allocation_usd"]
+
+    # Calculate dynamic boundaries based on data points to prevent clipping
+    x_min = min([uc.get("feasibility", 50) for uc in scoring] + [30]) - 5
+    x_max = max([uc.get("feasibility", 50) for uc in scoring] + [120]) + 5
+    y_min = min([uc.get("impact", 50) for uc in scoring] + [40]) - 5
+    y_max = max([uc.get("impact", 50) for uc in scoring] + [115]) + 5
 
     fig = go.Figure()
-    for uc in scoring:
-        color = colors_map.get(uc["priority"], "#FFB600")
-        label = priority_labels.get(uc["priority"], uc["priority"])
+    
+    # Render quadrant background rectangles for subtle tints
+    fig.add_shape(type="rect", x0=FEAS_MID, x1=x_max, y0=IMPACT_MID, y1=y_max, fillcolor="rgba(27,156,107,0.03)", line_width=0, layer="below")
+    fig.add_shape(type="rect", x0=x_min, x1=FEAS_MID, y0=IMPACT_MID, y1=y_max, fillcolor="rgba(232,163,23,0.03)", line_width=0, layer="below")
+    fig.add_shape(type="rect", x0=FEAS_MID, x1=x_max, y0=y_min, y1=IMPACT_MID, fillcolor="rgba(232,163,23,0.03)", line_width=0, layer="below")
+    fig.add_shape(type="rect", x0=x_min, x1=FEAS_MID, y0=y_min, y1=IMPACT_MID, fillcolor="rgba(208,52,44,0.03)", line_width=0, layer="below")
+
+    for i, uc in enumerate(scoring):
+        vt = uc.get("value_type", PRODUCTIVITY)
+        color = VT_COLORS.get(vt, "#4A525C")
+        alloc = allocs.get(uc["name"], 0)
+        
+        # Sizing and fill based on funding
+        is_deferred = uc["priority"] == "Watch"
+        base_size = max(12, min(40, (alloc / 1e6) * 15)) if alloc > 0 else 12
+        marker_size = base_size if not is_deferred else 10
+        fill_color = color
+        line_color = "rgba(255,255,255,0.4)" if is_deferred else "rgba(255,255,255,0.8)"
+        line_width = 1.5 if is_deferred else 1
+
+        label, _ = TIER.get(uc.get("priority", "Medium"), ("Evaluate", "#E8A317"))
+        rationale = uc.get("rationale", "")
+        qaction = uc.get("quadrant_action", "")
+        
+        # Fix 9: Show text labels only for funded items; deferred items show on hover only
+        mode = "markers+text" if not is_deferred else "markers"
         fig.add_trace(go.Scatter(
-            x=[uc["feasibility"]],
-            y=[uc["impact"]],
-            mode="markers+text",
-            marker=dict(
-                size=uc["composite_score"] * 0.6,
-                color=color,
-                opacity=0.75,
-                line=dict(width=2, color=color),
-            ),
-            text=[uc["name"]],
-            textposition="top center",
-            textfont=dict(size=10, color="#2D2D2D"),
+            x=[uc["feasibility"]], y=[uc["impact"]],
+            mode=mode,
+            marker=dict(size=marker_size, color=fill_color, opacity=0.85,
+                        line=dict(width=line_width, color=line_color)),
+            text=[uc["name"]], textposition="top center",
+            textfont=dict(size=10, color="#2E353D"),
             name=uc["name"],
             hovertemplate=(
                 f"<b>{uc['name']}</b><br>"
-                f"Impact: {uc['impact']}<br>"
-                f"Feasibility: {uc['feasibility']}<br>"
-                f"Speed: {uc['speed']}<br>"
-                f"Composite: {uc['composite_score']}<br>"
-                f"Action: {label}"
-                "<extra></extra>"
+                f"Value type: {VT_DISPLAY[vt]} [{VT_SHORT[vt]}]<br>"
+                f"Quadrant action: {qaction}<br>"
+                f"{rationale}<br>"
+                f"Composite: {uc['composite_score']}<extra></extra>"
             ),
         ))
 
-    # Quadrant lines
-    fig.add_hline(y=75, line_dash="dot", line_color="rgba(0,0,0,0.15)")
-    fig.add_vline(x=70, line_dash="dot", line_color="rgba(0,0,0,0.15)")
-
+    # Dividing lines at the true medians
+    fig.add_hline(y=IMPACT_MID, line_dash="dot", line_color="rgba(0,0,0,0.15)")
+    fig.add_vline(x=FEAS_MID, line_dash="dot", line_color="rgba(0,0,0,0.15)")
+    
     # Quadrant labels
-    fig.add_annotation(x=85, y=92, text="<b>INVEST NOW</b>", showarrow=False, font=dict(size=10, color="#00B894"), opacity=0.6)
-    fig.add_annotation(x=55, y=92, text="<b>STRATEGIC BET</b>", showarrow=False, font=dict(size=10, color="#FFB600"), opacity=0.6)
-    fig.add_annotation(x=85, y=58, text="<b>QUICK WIN</b>", showarrow=False, font=dict(size=10, color="#0096FF"), opacity=0.6)
-    fig.add_annotation(x=55, y=58, text="<b>DEPRIORITIZE</b>", showarrow=False, font=dict(size=10, color="#D63031"), opacity=0.6)
-
+    fig.add_annotation(x=x_max-2, y=y_max-2, text="<b>PRIME CANDIDATES</b>", showarrow=False, font=dict(size=10, color="#1B9C6B"), opacity=0.4, xanchor="right")
+    fig.add_annotation(x=x_min+2, y=y_max-2, text="<b>STRATEGIC BETS</b>", showarrow=False, font=dict(size=10, color="#E8A317"), opacity=0.4, xanchor="left")
+    fig.add_annotation(x=x_max-2, y=y_min+2, text="<b>TACTICAL ADD-ONS</b>", showarrow=False, font=dict(size=10, color="#E8A317"), opacity=0.4, xanchor="right")
+    fig.add_annotation(x=x_min+2, y=y_min+2, text="<b>MARGINAL</b>", showarrow=False, font=dict(size=10, color="#D0342C"), opacity=0.4, xanchor="left")
+    
     fig.update_layout(
-        margin=dict(l=0, r=0, t=10, b=0),
-        height=400,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        showlegend=False,
-        xaxis=dict(title="Feasibility & Readiness", showgrid=True, gridcolor="rgba(0,0,0,0.04)", range=[40, 100]),
-        yaxis=dict(title="Business Impact", showgrid=True, gridcolor="rgba(0,0,0,0.04)", range=[50, 100]),
+        margin=dict(l=10, r=20, t=10, b=10), height=650,
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", showlegend=False,
+        font=_plotly_font(),
+        xaxis=dict(title="Feasibility & Readiness (relative)", showgrid=True,
+                   gridcolor="rgba(0,0,0,0.04)", range=[x_min, x_max]),
+        yaxis=dict(title="Business Impact (relative)", showgrid=True,
+                   gridcolor="rgba(0,0,0,0.04)", range=[y_min, y_max]),
     )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-    # Scoring table below the chart using Streamlit dataframe for perfect alignment
-    _h('<div style="font-size: 12px; font-weight: 700; color: var(--grey-400); letter-spacing: 0.08em; text-transform: uppercase; margin: 16px 0 8px;">Detailed Scoring Breakdown</div>')
-    
-    # Clean up priorities for the table
-    df_data = []
-    for uc in scoring:
-        df_data.append({
-            "Use Case": uc["name"],
-            "Impact (40%)": uc["impact"],
-            "Feasibility (25%)": uc["feasibility"],
-            "Speed (20%)": uc["speed"],
-            "Fit (15%)": uc["fit"],
-            "Composite": uc["composite_score"],
-            "Action": priority_labels.get(uc["priority"], uc["priority"])
-        })
+    # Add the legend below the chart
+    legend_html = '<div class="quad-legend" style="border-bottom:1px solid var(--ink-150); padding-bottom:12px; margin-bottom:16px;">'
+    legend_html += '<div style="font-size:10px; font-weight:700; color:var(--ink-400); text-transform:uppercase; letter-spacing:0.1em; margin-right:8px;">Bubble Color</div>'
+    for vt in [REVENUE, OPPROFIT, PRODUCTIVITY]:
+        legend_html += f'<div class="quad-legend__item"><div class="quad-legend__dot" style="background:{VT_COLORS[vt]};"></div> {VT_DISPLAY[vt]}</div>'
+    legend_html += '<div style="width:16px;"></div>'
+    legend_html += '<div style="font-size:10px; font-weight:700; color:var(--ink-400); text-transform:uppercase; letter-spacing:0.1em; margin-right:8px;">Bubble Size</div>'
+    legend_html += '<div class="quad-legend__item"><div class="quad-legend__dot" style="background:var(--ink-400); width:14px; height:14px;"></div> Funded Allocation</div>'
+    legend_html += '<div class="quad-legend__item"><div class="quad-legend__dot" style="background:var(--ink-400); width:10px; height:10px;"></div> Deferred</div>'
+    legend_html += '</div>'
+    _h(legend_html)
+
+    # M3: table shows tiers, not raw decimals
+    _h('<div style="font-size:10px; font-weight:700; color:var(--ink-400); letter-spacing:0.1em; '
+       'text-transform:uppercase; margin:16px 0 8px;">Priority Breakdown</div>')
+    df_data = [{
+        "Use Case":    uc["name"],
+        "Quadrant":    uc.get("quadrant_name", ""),
+        "Priority":    TIER.get(uc.get("priority", "Medium"), ("Evaluate",))[0],
+        "Value Type":  VT_DISPLAY[uc.get("value_type", PRODUCTIVITY)],
+        "Impact":      _band(uc["impact"]),
+        "Technical Feasibility": _band(uc["feasibility"]),
+    } for uc in scoring]
     st.dataframe(df_data, use_container_width=True, hide_index=True)
-    st.html('<div style="height: 30px;"></div>')
+
+    # H2: "How we ranked this" expander
+    with st.expander("How to read this matrix"):
+        _h("""
+        <div style="font-size:13px; color:var(--ink-600); line-height:1.8;">
+        <b>Matrix layout:</b> The midlines represent static industry thresholds. Items in the top right (Prime Candidates) are funded first.<br>
+        <b>Quadrant consistency:</b> If a use case lands in "Strategic Bets", it is automatically deferred pending Phase 1 foundation delivery.<br>
+        <b>Bubble sizing:</b> Area is proportional to the dollar allocation for funded items. Deferred items are small and hollow.<br>
+        <b>Composite score formula:</b> Impact × 40% + Technical Feasibility × 25% + Speed × 20% + Strategic Fit × 15%,
+        reduced by an execution-risk discount.
+        </div>
+        """)
+    st.html('<div style="height: 10px;"></div>')
 
 
-def render_risk_heatmap(payload: dict) -> None:
-    """Render risk register as a visual heatmap grid."""
-    st.markdown('<div style="font-size: 18px; font-weight: 700; color: var(--pwc-black); margin-bottom: 16px;">Risk Register & Heatmap</div>', unsafe_allow_html=True)
-    risks = payload.get("risk_register", [])
-    if not risks:
-        return
 
-    prob_map = {"HIGH": 3, "MED": 2, "LOW": 1}
-    impact_map = {"HIGH": 3, "MED": 2, "LOW": 1}
+# ─────────────────────────────────────────────────────────────────────────────
+# 5 · STRATEGIC INVESTMENT LEDGER  (L1: evidence + rationale + deliverability; no projected dollar)
+# ─────────────────────────────────────────────────────────────────────────────
+_LEDGER_CSS = """
+<style>
+.aia-ledger { width:100%; border-collapse:collapse; font-family:Georgia, serif; border-top:2px solid var(--ink-900); border-bottom:2px solid var(--ink-900); }
+.aia-ledger th { font-family:Arial, sans-serif; font-size:10px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--ink-500); text-align:left; padding:12px 16px; border-bottom:1px solid var(--ink-200); }
+.aia-ledger th.num { text-align:right; }
+.aia-ledger tbody tr.data-row { background:var(--white); transition:background 0.15s ease; border-bottom:1px solid var(--ink-150); }
+.aia-ledger tbody tr.data-row:hover { background:var(--ink-50); }
+.aia-ledger td { padding:16px; vertical-align:top; border:none; }
+.aia-ledger td.num { text-align:right; font-size:15px; font-weight:600; color:var(--ink-900); white-space:nowrap; font-family:Arial, sans-serif; vertical-align:middle; }
+.aia-ledger .init { font-family:Arial, sans-serif; font-weight:700; color:var(--ink-900); font-size:14px; margin-bottom:4px; line-height:1.4; }
+.aia-ledger .evi { font-family:Georgia, serif; font-size:13px; color:var(--ink-600); line-height:1.5; font-style:italic; max-width:90%; }
+.aia-ledger .cite { font-family:Arial, sans-serif; font-size:11px; color:var(--ink-400); line-height:1.4; margin-top:8px; }
+.aia-ledger tr.grp td { background:var(--ink-50); font-family:Arial, sans-serif; font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--ink-900); padding:16px; border-bottom:1px solid var(--ink-200); border-top:1px solid var(--ink-200); }
+.aia-ledger tr.sub td { font-family:Arial, sans-serif; font-weight:600; color:var(--ink-600); font-size:12px; padding:12px 16px; border-bottom:1px solid var(--ink-200); }
+.aia-ledger tr.sub td.num { font-size:14px; color:var(--ink-800); }
+.aia-ledger tr.total td { background:var(--white); color:var(--ink-900); font-family:Arial, sans-serif; font-weight:700; font-size:14px; padding:16px; border-top:2px solid var(--ink-900); border-bottom:1px solid var(--ink-200); }
+.aia-ledger tr.total td.num { font-size:18px; }
+.lg-phase { font-family:Arial, sans-serif; display:inline-block; font-size:11px; font-weight:600; padding:4px 10px; border-radius:4px; background:var(--ink-100); color:var(--ink-700); white-space:nowrap; }
+.lg-deliv { font-family:Arial, sans-serif; display:inline-block; font-size:10px; font-weight:600; padding:3px 6px; border:1px solid var(--ink-200); color:var(--ink-600); margin-top:8px; }
+</style>
+"""
 
-    fig = go.Figure()
-    # Background heatmap grid (rgba format for plotly compatibility)
-    grid_colors = [
-        ["rgba(0, 184, 148, 0.25)", "rgba(255, 182, 0, 0.25)", "rgba(214, 48, 49, 0.25)"],
-        ["rgba(0, 184, 148, 0.25)", "rgba(255, 182, 0, 0.25)", "rgba(255, 90, 0, 0.25)"],
-        ["rgba(224, 255, 224, 0.25)", "rgba(0, 184, 148, 0.25)", "rgba(255, 182, 0, 0.25)"],
-    ]
-    for pi in range(3):
-        for ii in range(3):
-            fig.add_shape(
-                type="rect",
-                x0=ii + 0.5, y0=pi + 0.5, x1=ii + 1.5, y1=pi + 1.5,
-                fillcolor=grid_colors[pi][ii],
-                line=dict(color="rgba(0,0,0,0.08)", width=1),
-            )
 
-    for r in risks:
-        px = impact_map.get(r.get("impact", "MED").upper(), 2)
-        py = prob_map.get(r.get("prob", "MED").upper(), 2)
-        risk_score = px * py
-        color = "#D63031" if risk_score >= 6 else "#FFB600" if risk_score >= 3 else "#00B894"
-        fig.add_trace(go.Scatter(
-            x=[px], y=[py],
-            mode="markers+text",
-            marker=dict(size=30, color=color, opacity=0.85, line=dict(width=2, color="white")),
-            text=[r.get("risk", "")[:20]],
-            textposition="top center",
-            textfont=dict(size=9, color="#2D2D2D"),
-            hovertemplate=f"<b>{r.get('risk','')}</b><br>Probability: {r.get('prob','')}<br>Impact: {r.get('impact','')}<br>Mitigation: {r.get('mitigation','')}<extra></extra>",
-            showlegend=False,
-        ))
-
-    fig.update_layout(
-        margin=dict(l=0, r=0, t=10, b=0),
-        height=300,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(title="Impact", tickvals=[1, 2, 3], ticktext=["Low", "Med", "High"], range=[0.5, 3.5], showgrid=False),
-        yaxis=dict(title="Probability", tickvals=[1, 2, 3], ticktext=["Low", "Med", "High"], range=[0.5, 3.5], showgrid=False),
+def _ledger_row(r: dict) -> str:
+    """L1: render initiative + evidence/rationale + deliverability chip + allocation.
+    No projected dollar, value_at_stake, or roi_driver shown."""
+    evi    = r.get("evidence", "")         # sourced or labelled illustrative
+    why    = r.get("rationale", "")         # plain-English ranking reason (M4)
+    deliv  = r.get("deliverability_pct")    # = feasibility from matrix (L4)
+    vt     = r.get("value_type")
+    
+    vt_html = ""
+    if vt:
+        tag_class = "revenue" if vt == REVENUE else "opprofit" if vt == OPPROFIT else "productivity"
+        vt_html = f'<span class="vt-chip vt-chip--{tag_class}" style="margin-right:8px; margin-bottom:4px; transform:scale(0.85); transform-origin:left center;"><span class="vt-cue">{VT_SHORT[vt]}</span> {VT_DISPLAY[vt]}</span>'
+        
+    why_html   = f'<div class="evi">{why}</div>'   if why   else ""
+    deliv_html = (f'<div style="margin-top:6px;"><span class="lg-deliv">Feasibility: {deliv}%</span></div>'
+                  if deliv is not None else "")
+    cite_html  = f'<div class="cite">{evi}</div>'  if evi   else ""
+    return (
+        f'<tr class="data-row"><td><div class="init">{vt_html}{_field(r["initiative"])}</div>'
+        f'{why_html}{cite_html}{deliv_html}</td>'
+        f'<td><span class="lg-phase">{r.get("phase","\u2014")}</span></td>'
+        f'<td class="num">{_fmt_usd(r["allocation_usd"])}</td></tr>'
     )
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-    # Mitigation table
-    _h('<div style="font-size: 12px; font-weight: 700; color: var(--grey-400); letter-spacing: 0.08em; text-transform: uppercase; margin: 12px 0 8px;">Mitigation Strategies</div>')
-    for r in risks:
-        prob_color = {"HIGH": "#D63031", "MED": "#FFB600", "LOW": "#00B894"}.get(r.get("prob", "MED").upper(), "#FFB600")
-        _h(f"""
-        <div style="display:flex; gap:12px; align-items:flex-start; padding:10px 0; border-bottom:1px solid var(--grey-border-light);">
-            <div style="min-width:8px; width:8px; height:8px; border-radius:50%; background:{prob_color}; margin-top:5px;"></div>
-            <div>
-                <div style="font-size:13px; font-weight:600; color:var(--pwc-black);">{r.get('risk','')}</div>
-                <div style="font-size:12px; color:#4A4A4A; margin-top:2px;">{r.get('mitigation','')}</div>
-            </div>
-        </div>
-        """)
-    st.html('<div style="height: 30px;"></div>')
 
 
-def render_success_metrics(payload: dict) -> None:
-    """Render the success metrics / KPI tracking table."""
-    st.markdown('<div style="font-size: 18px; font-weight: 700; color: var(--pwc-black); margin-bottom: 16px;">Success Metrics & KPI Tracking</div>', unsafe_allow_html=True)
-    metrics = payload.get("success_metrics", [])
-    if not metrics:
-        return
-
-    _h("""
-    <table style="width:100%; border-collapse:collapse; font-size:13px; background:var(--white); border:1px solid var(--grey-border); box-shadow:var(--shadow-sm); border-radius:8px; overflow:hidden;">
-        <thead style="background:var(--grey-100); border-bottom:2px solid var(--grey-border);">
-            <tr>
-                <th style="padding:12px 16px; text-align:left; font-weight:700;">KPI</th>
-                <th style="padding:12px 16px; text-align:center; font-weight:700;">Baseline</th>
-                <th style="padding:12px 16px; text-align:center; font-weight:700;">Target</th>
-                <th style="padding:12px 16px; text-align:left; font-weight:700;">Measurement Method</th>
-            </tr>
-        </thead><tbody>
-    """)
-    for m in metrics:
-        _h(f"""
-        <tr style="border-bottom:1px solid var(--grey-border-light);">
-            <td style="padding:12px 16px; font-weight:600;">{m.get('kpi','')}</td>
-            <td style="padding:12px 16px; text-align:center; color:var(--grey-400);">{m.get('baseline','')}</td>
-            <td style="padding:12px 16px; text-align:center; color:#00B894; font-weight:700;">{m.get('target','')}</td>
-            <td style="padding:12px 16px; color:#4A4A4A;">{m.get('method','')}</td>
-        </tr>
-        """)
-    _h('</tbody></table>')
-    st.html('<div style="height: 30px;"></div>')
-
-
-def render_benchmarks(payload: dict) -> None:
-    st.markdown('<div style="font-size: 18px; font-weight: 700; color: var(--pwc-black); margin-bottom: 16px;">Interactive Peer Benchmarking</div>', unsafe_allow_html=True)
-    peers = payload.get("interactive_benchmarks", [])
-    
-    for p in peers:
-        with st.expander(f"{p.get('peer', 'Peer')} — {p.get('initiative', 'Initiative')}"):
-            _h(f"""
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--grey-border-light);">
-                <div style="font-size: 18px; font-weight: 800; color: #00B894;">{p.get('outcome', '')}</div>
-                <div style="display: flex; gap: 16px; text-align: center;">
-                    <div>
-                        <div style="font-size: 18px; font-weight: 700;">{p.get('similarity_score', 0)}</div>
-                        <div style="font-size: 10px; color: var(--grey-400); text-transform: uppercase;">Similarity</div>
-                    </div>
-                    <div>
-                        <div style="font-size: 18px; font-weight: 700;">{p.get('relevance_score', 0)}</div>
-                        <div style="font-size: 10px; color: var(--grey-400); text-transform: uppercase;">Relevance</div>
-                    </div>
-                    <div>
-                        <div style="font-size: 18px; font-weight: 700;">{p.get('transferability_score', 0)}</div>
-                        <div style="font-size: 10px; color: var(--grey-400); text-transform: uppercase;">Transfer</div>
-                    </div>
-                </div>
-            </div>
-            <div style="font-size: 13px; color: #4A4A4A; line-height: 1.6;">
-                {p.get('details', '')}
-            </div>
-            """)
-    st.html('<div style="height: 30px;"></div>')
-
-
-def render_capability_roadmap(payload: dict) -> None:
-    st.markdown('<div style="font-size: 18px; font-weight: 700; color: var(--pwc-black); margin-bottom: 16px;">Capability-Led Roadmap</div>', unsafe_allow_html=True)
-    rm = payload.get("capability_roadmap", {})
-    
-    phases = [
-        {"name": "Phase 1: Foundations", "items": rm.get("phase1", [])},
-        {"name": "Phase 2: Core Scaling", "items": rm.get("phase2", [])},
-        {"name": "Phase 3: Advanced", "items": rm.get("phase3", [])},
-    ]
-
-    for ph in phases:
-        _h(f"""
-        <div style="background: var(--grey-100); padding: 8px 12px; border-radius: 4px; font-size: 12px; font-weight: 700; color: var(--pwc-black); text-transform: uppercase; margin-bottom: 8px;">
-            {ph['name']}
-        </div>
-        """)
-        for item in ph['items']:
-            _h(f"""
-            <div style="background: var(--white); border: 1px solid var(--grey-border); border-left: 3px solid var(--brand-primary); padding: 12px; border-radius: 4px; margin-bottom: 8px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow-sm);">
-                <div style="flex: 2; font-weight: 600;">{item.get('initiative', '')}</div>
-                <div style="flex: 1; color: var(--grey-400);"><span style="font-size: 10px; text-transform: uppercase;">Owner:</span> {item.get('owner', '')}</div>
-                <div style="flex: 1; color: #00B894; font-weight: 600; text-align: right;">{item.get('value_pool', '')}</div>
-                <div style="flex: 1; color: var(--grey-label); font-size: 11px; text-align: right;">{item.get('milestones', '')}</div>
-            </div>
-            """)
-    st.html('<div style="height: 40px;"></div>')
-
-
-def render_stacked_bar_allocation(plan: dict) -> None:
-    st.markdown('<div style="font-size: 18px; font-weight: 700; color: var(--pwc-black); margin-bottom: 16px;">Phased Capital Allocation</div>', unsafe_allow_html=True)
-    
-    rows = plan.get("ledger_rows", [])
+def _ledger_group(title: str, rows: list) -> str:
     if not rows:
-        return
-        
-    phases = ["Phase 1: Foundations", "Phase 2: Scale", "Phase 3: Maturity"]
-    
-    # Collect unique pillars
-    pillars = []
-    for r in rows:
-        p = r.get("pillar", "Other")
-        if p not in pillars:
-            pillars.append(p)
-            
-    # If empty or missing, fallback
-    if not pillars:
-        return
-    
-    from collections import defaultdict
-    data = defaultdict(lambda: [0.0, 0.0, 0.0])
-    
-    for r in rows:
-        pillar = r.get("pillar", "Other")
-        amt = r.get("allocation_usd", 0) / 1_000_000.0  # Convert to Millions
-        
-        # Distribute budget across phases based on type
-        if "Foundation" in pillar:
-            data[pillar][0] += amt * 0.8
-            data[pillar][1] += amt * 0.2
-        elif "Value Driver" in pillar or "Primary" in pillar:
-            data[pillar][0] += amt * 0.4
-            data[pillar][1] += amt * 0.4
-            data[pillar][2] += amt * 0.2
-        else:
-            data[pillar][0] += amt * 0.1
-            data[pillar][1] += amt * 0.5
-            data[pillar][2] += amt * 0.4
-            
-    fig = go.Figure()
-    
-    # Dynamic coloring for unknown pillars
-    colors_palette = ["#00B894", "#FFB600", "#FF5A00", "#0096FF", "#6C5CE7"]
-    colors = {}
-    for i, p in enumerate(pillars):
-        if "Foundation" in p:
-            colors[p] = "#2D2D2D"
-        elif "Value Driver" in p or "Primary" in p:
-            colors[p] = "#D04A02"
-        else:
-            colors[p] = colors_palette[i % len(colors_palette)]
-    
-    for pillar in pillars:
-        fig.add_trace(go.Bar(
-            name=pillar,
-            x=phases,
-            y=data[pillar],
-            marker_color=colors[pillar],
-            hovertemplate="$%{y:.1f}M"
-        ))
-        
-    fig.update_layout(
-        barmode='stack',
-        margin=dict(l=0, r=0, t=10, b=0),
-        height=300,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        yaxis=dict(showgrid=True, gridcolor="rgba(0,0,0,0.04)", tickprefix="$", ticksuffix="M")
-    )
-    
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    st.html('<div style="height: 30px;"></div>')
+        return ""
+    html_str = f'<tr class="grp"><td colspan="3">{title}</td></tr>'
+    html_str += "".join(_ledger_row(r) for r in rows)
+    alloc = sum(r["allocation_usd"] for r in rows)
+    html_str += (f'<tr class="sub"><td>Subtotal</td><td></td>'
+                 f'<td class="num">{_fmt_usd(alloc)}</td></tr>')
+    return html_str
 
 
 def render_investment_ledger(plan: dict) -> None:
-    st.markdown('<div style="font-size: 18px; font-weight: 700; color: var(--pwc-black); margin-bottom: 16px;">Strategic Investment Ledger (Use Case Allocation)</div>', unsafe_allow_html=True)
-    
+    _section_title("Strategic Investment Ledger",
+                   "A transparent accounting of the capital deployment strategy. Allocations are strictly weighted by priority tier and technical feasibility rather than theoretical return.")
     rows = plan.get("ledger_rows", [])
     if not rows:
         return
-        
-    df_data = []
-    for r in rows:
-        df_data.append({
-            "Pillar": r['pillar'],
-            "Use Case / Initiative": r['initiative'],
-            "Budget Allocation": _fmt_usd(r['allocation_usd']),
-            "Value Driver": r['roi_driver']
-        })
-        
-    st.dataframe(df_data, use_container_width=True, hide_index=True)
-    st.html('<div style="height: 30px;"></div>')
+
+    value_rows = [r for r in rows if r.get("pillar", "").startswith("Value Initiative")]
+    found_rows = [r for r in rows if r.get("pillar", "").startswith("Foundation")]
+    deliv_rows = [r for r in rows if r.get("pillar", "").startswith("Delivery")]
+
+    total_alloc = sum(r["allocation_usd"] for r in rows)
+    budget = plan.get("total_budget", 0.0)
+    si_cost = plan.get("si_cost", 0.0)
+    si_inf_pct = plan.get("si_inflation", 0.0)
+    total_cost = plan.get("total_cost", 0.0)
+
+    deferred = plan.get("deferred_initiatives", [])
+    deferred_html = ""
+    foundations_first = plan.get("posture") == "ADDRESS FOUNDATIONS FIRST"
+    
+    if deferred and not foundations_first:
+        deferred_html = (
+            '<tr><td colspan="3" style="color:var(--ink-500); font-size:13px; padding:12px 24px;">'
+            '<b>Not funded in current cycle:</b>'
+            '<ul style="margin:6px 0 0 0; padding-left:18px; line-height:1.8;">'
+        )
+        for name in deferred:
+            deferred_html += f'<li>{name}</li>'
+        deferred_html += (
+            '</ul>'
+            '<div style="margin-top:6px; font-style:italic; font-size:12px; color:var(--ink-400);">'
+            'These rank below the readiness threshold for the current data estate; '
+            're-evaluate once Phase 1 foundations are delivered.</div>'
+            '</td></tr>'
+        )
+
+    # Value Initiatives manually constructed to inject subtotals
+    value_html = f'<tr class="grp"><td colspan="3">Value Initiatives</td></tr>'
+    if foundations_first:
+        names = ", ".join(deferred)
+        value_html += (
+            f'<tr><td colspan="3" style="color:var(--ink-500); font-size:13px; padding:12px 24px;">'
+            f'<b>Not funded in current cycle:</b> {names}. '
+            f'All value initiatives are pending Phase 1 foundation delivery.</td></tr>'
+        )
+        value_html += (f'<tr class="sub"><td>Value Initiatives Subtotal</td><td></td>'
+                       f'<td class="num">$0</td></tr>')
+    elif value_rows:
+        value_html += "".join(_ledger_row(r) for r in value_rows)
+        vp = plan.get("value_portfolio")
+        if vp and vp.get("usd"):
+            for vt in [REVENUE, OPPROFIT, PRODUCTIVITY]:
+                if vp["usd"][vt] > 0:
+                    value_html += (f'<tr>'
+                                   f'<td><span style="font-size:13px; font-weight:600; color:var(--ink-500); padding-left:24px;">\u21b3 {VT_DISPLAY[vt]} allocation</span></td><td></td>'
+                                   f'<td class="num" style="color:var(--ink-600); font-size:14px;">{_fmt_usd(vp["usd"][vt])}</td></tr>')
+        value_html += (f'<tr class="sub"><td>Value Initiatives Subtotal</td><td></td>'
+                       f'<td class="num">{_fmt_usd(sum(r["allocation_usd"] for r in value_rows))}</td></tr>')
+    else:
+        value_html = ""
+
+    body = (
+        value_html
+        + deferred_html
+        + _ledger_group("Foundation (Data &amp; Controls)", found_rows)
+        + _ledger_group("Delivery", deliv_rows)
+    )
+    body += (f'<tr class="total"><td>Client mandate (hard envelope)</td><td></td>'
+             f'<td class="num">{_fmt_usd(budget)}</td></tr>')
+    if si_cost > 0:
+        body += (f'<tr class="total" style="background:var(--ink-50);color:var(--ink-800);font-weight:700;"><td>Systems-integrator premium (+{si_inf_pct:.0%}, on top)</td><td></td>'
+                 f'<td class="num" style="color:var(--ink-800);">{_fmt_usd(si_cost)}</td></tr>')
+    body += (f'<tr class="total"><td>Total Programme Cost</td><td></td>'
+             f'<td class="num">{_fmt_usd(total_cost)}</td></tr>')
+
+    table = (
+        _LEDGER_CSS
+        + '<table class="aia-ledger"><thead><tr>'
+        + '<th style="width:60%">Initiative &amp; Evidence</th>'
+        + '<th style="width:14%">Phase</th>'
+        + '<th class="num" style="width:26%">Allocation</th>'
+        + f'</tr></thead><tbody>{body}</tbody></table>'
+    )
+    _h(table)
+    # L2: state the allocation methodology explicitly
+    _h('<div style="font-size: 11.5px; color: var(--ink-500); margin-top: 10px; line-height: 1.6;">'
+       '<em>Note: The capital allocation model distributes the budget pool proportionally across approved initiatives based on their matrix priority score and technical feasibility weighting. '
+       'Initiatives deferred to subsequent phases receive zero capital allocation in the current cycle.</em><br>'
+       '<em>Technical Feasibility</em> reflects the inverse execution risk from the prioritisation matrix. '
+       'Any System Integrator (SI) delivery premiums are modelled as additions to the base envelope; selecting a "fully internal" operating model removes this premium.</div>')
+    st.html('<div style="height: 10px;"></div>')
+
+    # H2: ranking methodology expander for ledger
+    with st.expander("How we ranked and sized these initiatives"):
+        _h("""
+        <div style="font-size:13px; color:var(--ink-600); line-height:1.8;">
+        <b>Allocation formula:</b> each value initiative receives a share of the deployable budget
+        proportional to <em>composite score × (feasibility / 100)</em>.
+        Higher-scoring and more-deliverable initiatives receive more capital.<br>
+        <b>Foundation spend</b> is sized as 20–55% of total budget, scaling with your data-estate
+        complexity and compliance burden (Q3.1, Q3.2, Q4.2).<br>
+        <b>Evidence chips</b> are labelled “illustrative — unverified” until confirmed against
+        the source annual report or Capital Markets Day disclosure.
+        </div>
+        """)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 6 · CAPITAL ALLOCATION BY PHASE
+# ─────────────────────────────────────────────────────────────────────────────
+def render_stacked_bar_allocation(plan: dict) -> None:
+    _section_title("Capital Allocation by Phase",
+                   "Foundation is front-loaded; value initiatives unlock as phases are validated.")
+    phases = plan.get("phases", [])
+    if not phases:
+        return
+    foundation_usd = plan.get("foundation_usd", 0.0)
+    x = [f"{p['name']}<br>{p['window']}" for p in phases]
+    foundation_series = [foundation_usd / 1e6] + [0.0] * (len(phases) - 1)
+    value_series = [0.0] + [p["usd"] / 1e6 for p in phases[1:]]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(name="Foundation (Data &amp; Controls)", x=x, y=foundation_series,
+                         marker_color="#2E353D", hovertemplate="$%{y:.1f}M<extra></extra>"))
+    fig.add_trace(go.Bar(name="Value Initiatives", x=x, y=value_series,
+                         marker_color="#D04A02", hovertemplate="$%{y:.1f}M<extra></extra>"))
+    fig.update_layout(
+        barmode="stack", margin=dict(l=0, r=0, t=10, b=0), height=300,
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=_plotly_font(),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        yaxis=dict(showgrid=True, gridcolor="rgba(0,0,0,0.04)", tickprefix="$", ticksuffix="M"),
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    st.html('<div style="height: 10px;"></div>')
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 7 · AI MATURITY ASSESSMENT
+# ─────────────────────────────────────────────────────────────────────────────
+def render_maturity_gauge(payload: dict, plan: dict = None) -> None:
+    pass # Removed per PwC/FANG design requirements
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 8 · COMPETITIVE BENCHMARKING  (sourced chart + tailored cards + sources)
+# ─────────────────────────────────────────────────────────────────────────────
+def _extract_bps(text: str) -> int:
+    m = re.search(r"(\d+)\s*bps", text or "")
+    return int(m.group(1)) if m else 0
+
+
+def _transfer_bar(label: str, val: int, color: str) -> str:
+    val = max(0, min(int(val or 0), 100))
+    return (f'<div style="margin-bottom:9px;">'
+            f'<div style="display:flex; justify-content:space-between; font-size:11px; color:var(--ink-500); margin-bottom:3px;">'
+            f'<span>{label}</span><span style="font-weight:700; color:var(--ink-800);">{val}</span></div>'
+            f'<div style="height:6px; background:var(--ink-100); border-radius:999px; overflow:hidden;">'
+            f'<div style="height:100%; width:{val}%; background:{color}; border-radius:999px;"></div></div></div>')
+
+
+def render_benchmarks(payload: dict) -> None:
+    _section_title("Competitive Benchmarking (Total Gross Uplifts)",
+                   "How FMCG leaders have monetised AI (including broader market factors) — and how transferable each play is to you.")
+
+    SELF_ALIASES = [{"unilever","hindustan unilever","hul"}, {"procter","p&g","pandg","procter & gamble","procter and gamble"}, {"itc"}]
+    def _is_self(peer, target):
+        t, p = (target or "").lower(), (peer or "").lower()
+        # Direct substring match (both directions)
+        if t and p and (t in p or p in t):
+            return True
+        if any(tok in p for tok in t.split() if len(tok) > 3): return True
+        return any((any(al in t for al in grp) and any(al in p for al in grp)) for grp in SELF_ALIASES)
+
+    target_company = st.session_state.get("company_name", "")
+
+    # Fix 7: Determine if regional peers should be included.
+    # Show regional peers only if the client's region matches.
+    region_display = st.session_state.get("region", "")
+    include_regional = "india" in (region_display or "").lower() or "south asia" in (region_display or "").lower()
+
+    peers = []
+    for v in PEER_INTELLIGENCE.values():
+        if _is_self(v["company"], target_company):
+            continue
+        # Filter out regional peers for non-India clients
+        if v.get("tier") == "regional" and not include_regional:
+            continue
+        bps = _extract_bps(v.get("margin_uplift", ""))
+        if bps:
+            peers.append((v["company"], bps, v.get("payback_months", 0), v.get("headline_stat", "")))
+    peers.sort(key=lambda t: t[1])  # ascending so the longest bar sits on top
+
+    if peers:
+        names = [p[0] for p in peers]
+        vals = [p[1] for p in peers]
+        # Darker brand for the top performers, lighter for the rest.
+        top_cut = sorted(vals, reverse=True)[: max(1, len(vals) // 3)][-1]
+        colors = ["#D04A02" if v >= top_cut else "#F0A579" for v in vals]
+        fig = go.Figure(go.Bar(
+            x=vals, y=names, orientation="h",
+            marker_color=colors,
+            text=[f"{v} bps" for v in vals], textposition="outside",
+            textfont=dict(size=11, color="#2E353D"),
+            hovertemplate="<b>%{y}</b><br>%{x} bps gross-margin expansion<extra></extra>",
+        ))
+        fig.update_layout(
+            margin=dict(l=0, r=30, t=8, b=0), height=max(260, 26 * len(peers) + 60),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=_plotly_font(),
+            xaxis=dict(title="Disclosed gross-margin expansion from AI (bps)", showgrid=True,
+                       gridcolor="rgba(0,0,0,0.05)", range=[0, max(vals) * 1.25]),
+            yaxis=dict(showgrid=False),
+        )
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+    # ── 8b. Tailored, client-specific benchmark cards (from the LLM) ────────
+    raw_bms = payload.get("interactive_benchmarks", [])
+    bms = [p for p in raw_bms if not _is_self(p.get("peer", ""), target_company)]
+    
+    if bms:
+        _h('<div style="font-size:10px; font-weight:700; color:var(--ink-400); letter-spacing:0.1em; '
+           'text-transform:uppercase; margin:18px 0 10px;">Most Relevant Plays for You</div>')
+        cols = ["#1B9C6B", "#1F6FEB", "#D04A02"]
+        for i, p in enumerate(bms):
+            accent = cols[i % len(cols)]
+            with st.expander(f"{p.get('initiative', 'AI initiative')} — Transferability: {p.get('transferability_score', 0)}/100", expanded=(i == 0)):
+                bars = (_transfer_bar("Similarity", p.get("similarity_score", 0), "#1F6FEB")
+                        + _transfer_bar("Relevance", p.get("relevance_score", 0), "#1B9C6B")
+                        + _transfer_bar("Transferability", p.get("transferability_score", 0), "#D04A02"))
+                _h(f"""
+                <div style="display:flex; gap:24px; align-items:flex-start;">
+                  <div style="flex:1.3;">
+                    <div style="font-size:18px; font-weight:800; color:{accent}; line-height:1.1; margin-bottom:6px;">
+                        {_field(p.get('initiative', ''))}</div>
+                    <div style="font-size:12px; font-weight:600; color:var(--ink-500); margin-bottom:10px;">
+                        {p.get('peer', 'Peer')} reported: {_field(p.get('outcome', ''))}</div>
+                    <div style="font-size:13px; color:var(--ink-600); line-height:1.65;">{_field(p.get('details', ''))}</div></div>
+                  </div>
+                  <div style="flex:1; min-width:200px;">{bars}</div>
+                </div>
+                """)
+
+
+    # Fix #8: distinguish corpus-sourced bars from LLM-generated cards.
+    _h('<div style="font-size:11px; color:var(--ink-400); line-height:1.65; margin-top:14px; '
+       'border-top:1px solid var(--ink-150); padding-top:10px;">'
+       '<b style="color:var(--ink-500);">Sources (bar chart):</b> Company Annual Reports 2023\u201324 · '
+       'Investor Capital Markets Day disclosures. '
+       'The gross-margin figures above are drawn from our sourced peer corpus. '
+       '<b style="color:var(--ink-500);">"Most Relevant Plays" cards:</b> Indicative \u2014 modelled from '
+       'public disclosures and company intelligence; treat as directional, not audited.'
+       '</div>')
+    st.html('<div style="height: 10px;"></div>')
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 9 · RISK REGISTER & HEAT MAP
+# ─────────────────────────────────────────────────────────────────────────────
+def render_risk_register(plan: dict) -> None:
+    pass # Removed per PwC/FANG design requirements
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 10 · SENSITIVITY ANALYSIS / BIGGEST UNLOCK
+# ─────────────────────────────────────────────────────────────────────────────
+def render_biggest_unlocks(plan: dict) -> None:
+    unlocks = plan.get("biggest_unlocks", [])
+    if not unlocks:
+        return
+        
+    _section_title("The Biggest Unlocks", "Counterfactual levers that significantly change your investment posture or value-delivery capacity.")
+    
+    for u in unlocks:
+        flip_text = f"flips posture to <b style='color:var(--brand);'>{u['posture_flip']}</b>" if u.get("posture_flip") else ""
+        delta_text = f"unlocks <b>{u['delta_funded']}</b> additional use cases above the readiness bar" if u.get("delta_funded", 0) > 0 else ""
+        impact = " and ".join(filter(None, [flip_text, delta_text]))
+        
+        _h(f"""
+        <div style="background:var(--ink-50); border:1px solid var(--ink-150); border-left:4px solid var(--brand);
+                    border-radius:8px; padding:16px; margin-bottom:12px;">
+            <div style="font-size:15px; font-weight:700; color:var(--ink-900); margin-bottom:6px;">If you: {u['lever']}</div>
+            <div style="font-size:13px; color:var(--ink-700);">Result: It {impact}.</div>
+        </div>
+        """)
+    st.html('<div style="height: 10px;"></div>')
+
+
+
+def render_company_header() -> None:
+    company = st.session_state.get("company_name", "Unknown Company")
+    geo = st.session_state.get("geography", "Global")
+    
+    # Generate dynamic initials for the logo
+    words = company.replace("&", "").replace("-", " ").split()
+    if not words:
+        initials = "C"
+    elif len(words) == 1:
+        initials = words[0][:2].upper()
+    else:
+        initials = (words[0][0] + words[1][0]).upper()
+    
+    html = f"""
+    <div style="background: var(--white); border: 1px solid var(--ink-150); border-radius: 12px; padding: 20px 24px; margin-bottom: 24px; margin-top: 10px; display: flex; justify-content: space-between; align-items: center; box-shadow: var(--sh-sm);">
+        <div style="display: flex; align-items: center; gap: 16px;">
+            <div style="width: 52px; height: 52px; border-radius: 10px; background: linear-gradient(135deg, var(--ink-900) 0%, var(--ink-700) 100%); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800; font-family: Georgia, serif; letter-spacing: 0.05em; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+                {initials}
+            </div>
+            <div>
+                <div style="font-size: 10.5px; font-weight: 700; color: var(--ink-400); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px;">Target Enterprise</div>
+                <div style="font-size: 24px; font-weight: 800; color: var(--ink-900); font-family: Georgia, serif; line-height: 1;">{_field(company)}</div>
+            </div>
+        </div>
+        <div style="text-align: right;">
+            <div style="font-size: 10.5px; font-weight: 700; color: var(--ink-400); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px;">Operating Region <span style="font-size:9px; font-weight:500; color:var(--ink-300);">(display only)</span></div>
+            <div style="display: inline-block; background: var(--ink-50); border: 1px solid var(--ink-200); padding: 4px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--ink-700);">
+                <span style="color:var(--brand); margin-right:4px;">&#9679;</span>{_field(geo)}
+            </div>
+        </div>
+    </div>
+    """
+    _h(html)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ORCHESTRATOR
+# ─────────────────────────────────────────────────────────────────────────────
 def render_full_dashboard() -> None:
     plan = st.session_state.thesis_plan
     payload = st.session_state.get("thesis_payload", {})
 
-    # 1. Executive Recommendation & Confidence (BCG Phased)
+    nav_l, _ = st.columns([1.7, 4])
+    with nav_l:
+        if st.button("\u2190 Review & Edit Answers", key="edit_answers_top",
+                     type="secondary", use_container_width=True):
+            st.session_state.app_phase = 1
+            st.session_state.wizard_page = 5
+            st.rerun()
+
+    # Header & posture
+    render_company_header()
+    render_how_to_read()
     render_decision_banner(payload, plan)
 
-    # 2. Executive Summary & Investment Thesis Rationale
+    # Executive thesis (with alignment sentence)
     render_executive_summary(payload)
 
-    # 3. AI Maturity Gauge (visual)
-    render_maturity_gauge(payload)
+    # Value-pool portfolio (Framework 2)
+    render_value_portfolio(plan)
 
-    # 4. Use Case Prioritization Matrix (McKinsey Impact vs Feasibility)
+    # Named-quadrant matrix (Framework 1)
     render_use_case_prioritization(plan)
 
-    # 5. Phased Capital Allocation (Stacked Bar)
-    render_stacked_bar_allocation(plan)
+    # Phase timeline (roadmap)
+    render_phase_timeline(plan)
 
-    # 6. Strategic Investment Ledger (detailed table)
+    # Ledger (with value-type column + subtotals)
     render_investment_ledger(plan)
 
-    # 7. Scenario-Based Financial Model (interactive S-curves)
-    render_interactive_financial_model(plan)
+    # Capital allocation by phase removed as requested
+    # 7 · Readiness context
+    render_maturity_gauge(payload, plan)
 
-    # 8. Five-Gate Readiness Assessment
-    render_five_gates(payload)
-
-    # 9. Risk Register & Heatmap
-    render_risk_heatmap(payload)
-
-    # 10. Peer Benchmarking
+    # 8 · Sourced peer evidence + transferability
     render_benchmarks(payload)
 
-    # 11. Success Metrics / KPI Tracking
-    render_success_metrics(payload)
-        
-    st.html('<div style="height: 50px;"></div>')
-    
-    # Export to PDF Option
-    st.markdown("---")
-    colA, colB, colC = st.columns([1, 2, 1])
-    with colB:
-        if st.button("📄 Export to PDF", use_container_width=True):
-            st.components.v1.html(
-                "<script>window.parent.print();</script>",
-                height=0, width=0
-            )
+    # 9 · What could go wrong + mitigations
+    render_risk_register(plan)
 
-    _h("""
-    <div style="font-size: 11px; color: var(--grey-text); line-height: 1.6; border-top: 1px solid var(--grey-border); padding-top: 20px;">
-        <strong>Disclaimer:</strong> This executive platform generates illustrative estimates derived from proprietary industry benchmarks and client-reported data. Figures should be validated with professional advisors before investment decisions are made. All projections are subject to stated confidence bands and scenario assumptions. Confidential — not for external distribution.
+    # 10 · Sensitivity levers
+    render_biggest_unlocks(plan)
+
+    # G0.1: render_interactive_financial_model removed (no ROI / NPV / payback)
+
+    st.html('<div style="height: 20px;"></div>')
+
+    # Navigation + export
+    st.markdown("---")
+    colA, _, colC = st.columns([1.6, 1.2, 1.4])
+    with colA:
+        if st.button("\u2190 Review & Edit Answers", key="edit_answers_bottom",
+                     type="secondary", use_container_width=True):
+            st.session_state.app_phase = 1
+            st.session_state.wizard_page = 5
+            st.rerun()
+    with colC:
+        if st.button("Export to PDF", key="export_pdf", use_container_width=True):
+            st.components.v1.html("""
+                <script>
+                    window.parent.document.querySelectorAll('details').forEach(el => el.open = true);
+                    setTimeout(function(){ window.parent.print(); }, 400);
+                </script>
+            """, height=0, width=0)
+
+    # Audit footer (E2 — run_id stamped if audit logger is active)
+    run_id  = st.session_state.get("run_id",  "n/a")
+    eng_ver = st.session_state.get("engine_version", "4.0.0")
+    corp_ver = st.session_state.get("corpus_version", "0.1.0-unverified")
+    mode    = st.session_state.get("report_mode", "deterministic")
+    import datetime
+    stamp_utc = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%MZ")
+    _h(f"""
+    <div style="font-size:11px; color:var(--ink-400); line-height:1.6; border-top:1px solid var(--ink-150); padding-top:18px;">
+        <strong>Disclaimer:</strong> This report produces a prioritisation diagnostic, not a financial forecast.
+        No ROI, NPV, or payback figures are presented. Allocation figures represent the client's own stated
+        budget, not projected returns. Evidence is labelled illustrative until confirmed against source disclosures.
+        Confidential — not for external distribution.<br>
+        <span style="color:var(--ink-300); font-size:10.5px;">
+            Run {_field(run_id)} &middot; Engine {_field(eng_ver)} &middot; Corpus {_field(corp_ver)}
+            &middot; Mode: {_field(mode)} &middot; {stamp_utc}
+        </span>
     </div>
     """)
+

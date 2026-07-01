@@ -4,7 +4,7 @@ Entry point for the AI Investment Engine.
 
 Phase 0  Landing page (welcome, overview)
 Phase 1  Unified intake form (company, KPIs, tech stack, discovery, budget)
-Phase 3  Full investment thesis dashboard (full-width)
+Phase 3  Full AI investment prioritisation dashboard (full-width)
 
 Run with: .venv/bin/streamlit run app.py --server.port 8502
 """
@@ -32,7 +32,7 @@ from ui.sidebar import (
     render_intake_form,
 )
 from ui.dashboard import render_full_dashboard
-
+from storage.audit import init_db
 
 def main() -> None:
     # Inject CSS theme first (must precede all rendering)
@@ -40,6 +40,9 @@ def main() -> None:
 
     # Initialize all session state keys
     init_session_state()
+
+    # Initialize the audit database
+    init_db()
 
     # Render the persistent top header bar and sidebar branding
     render_header()
@@ -54,7 +57,7 @@ def main() -> None:
         # Phase 1: Full-width unified intake form
         render_intake_form()
     else:
-        # Phase 3: Full-width investment thesis dashboard
+        # Phase 3: Full-width AI investment prioritisation dashboard
         render_full_dashboard()
 
 

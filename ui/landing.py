@@ -18,7 +18,7 @@ _HERO_HTML = """
     <div class="lp-badge">FMCG / CPG &nbsp;&middot;&nbsp; STRATEGIC INTELLIGENCE v1.0</div>
     <h1 class="lp-h1">
       AI Investment<br>
-      <span class="lp-h1-accent">Engine</span>
+      <span class="lp-h1-accent">Prioritisation</span>
     </h1>
     <p class="lp-tagline">
       Bottom-up capital allocation for FMCG transformation programmes.
@@ -35,7 +35,7 @@ _HERO_HTML = """
     <div class="lp-dashboard-mock">
       <div class="lp-mock-topbar">
         <div class="lp-mock-dot"></div>
-        <div class="lp-mock-topbar-title">Investment Thesis</div>
+        <div class="lp-mock-topbar-title">AI Investment Prioritisation</div>
         <div class="lp-mock-topbar-badge">GENERATED</div>
       </div>
       <div class="lp-mock-kpi-row">
