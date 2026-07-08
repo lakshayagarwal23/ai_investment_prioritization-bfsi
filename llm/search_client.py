@@ -14,7 +14,8 @@ def extract_company_data(company_name: str) -> dict:
     Searches the internet for the company and extracts key metrics into a dict 
     matching the questionnaire keys. Returns provenance objects.
     """
-    api_key = os.environ.get("GEMINI_API_KEY")
+    import streamlit as st
+    api_key = os.environ.get("GEMINI_API_KEY") or st.session_state.get("gemini_api_key")
     if not api_key:
         return {"error": "Missing GEMINI_API_KEY"}
         

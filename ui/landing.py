@@ -74,6 +74,19 @@ def render_landing_page() -> None:
     """Render the landing hero and handle the intake initiation."""
     st.html(_HERO_HTML_TOP)
     
+    import os
+    if not os.environ.get("GEMINI_API_KEY") and not st.session_state.get("gemini_api_key"):
+        st.html("""
+        <div style="background: var(--orange-tint); border: 1px solid var(--pwc-orange); padding: var(--sp-4); border-radius: var(--radius-card); margin-bottom: var(--sp-4);">
+            <strong style="color: var(--pwc-orange);">LLM Narrative & Search Prefill Enabled</strong><br>
+            <span style="font-size: 13px; color: var(--g700);">Provide a Gemini API Key to activate web scraping and executive summary generation.</span>
+        </div>
+        """)
+        api_key_val = st.text_input("Gemini API Key", type="password", key="gemini_key_input")
+        if api_key_val:
+            st.session_state.gemini_api_key = api_key_val
+            st.rerun()
+            
     # Left align the button within the landing container limit
     col1, _ = st.columns([1, 3])
     with col1:

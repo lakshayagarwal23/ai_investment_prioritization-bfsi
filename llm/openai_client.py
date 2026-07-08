@@ -46,10 +46,12 @@ def generate_executive_summary(company: str, plan: list[dict], answers: dict, se
     )
     
     # 2. Prompt Gemini for the hero narrative
-    if not GEMINI_API_KEY:
+    import streamlit as st
+    api_key = os.environ.get("GEMINI_API_KEY") or st.session_state.get("gemini_api_key")
+    if not api_key:
         ai_narrative = "<div class='hz-status-breach' style='padding: 12px; margin-bottom: 20px;'><strong>Configuration Error:</strong> GEMINI_API_KEY is missing. Narrative generation is disabled. Please provide a valid API key to enable LLM features.</div>"
     else:
-        client = genai.Client(api_key=GEMINI_API_KEY)
+        client = genai.Client(api_key=api_key)
         prompt = f"""
         You are a tier-1 management consultant (McKinsey/PwC) advising the C-suite of {company}, a firm in the {sector} sector.
         We have just generated an AI Use Case Prioritization Matrix for them. 
