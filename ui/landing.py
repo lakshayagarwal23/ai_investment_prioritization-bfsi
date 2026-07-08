@@ -6,6 +6,7 @@ Renders as Phase 0 — concise C-suite overview before intake begins.
 """
 
 import streamlit as st
+from llm.search_client import extract_company_data
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -15,13 +16,13 @@ import streamlit as st
 _HERO_HTML = """
 <div class="lp-hero">
   <div class="lp-hero-left">
-    <div class="lp-badge">FMCG / CPG &nbsp;&middot;&nbsp; STRATEGIC INTELLIGENCE v1.0</div>
+    <div class="lp-badge">BFSI / ASSET MANAGEMENT &nbsp;&middot;&nbsp; STRATEGIC INTELLIGENCE v2.0</div>
     <h1 class="lp-h1">
       AI Investment<br>
       <span class="lp-h1-accent">Prioritisation</span>
     </h1>
     <p class="lp-tagline">
-      Bottom-up capital allocation for FMCG transformation programmes.
+      Bottom-up capital allocation for Asset Management transformation programmes.
       Peer-benchmarked. Risk-adjusted. Board-ready.
     </p>
     <div class="lp-tag-row">
@@ -53,9 +54,9 @@ _HERO_HTML = """
         </div>
       </div>
       <div class="lp-mock-chart-area">
-        <div class="lp-mock-chart-bar-wrap"><div class="lp-mock-chart-bar" style="height:62%"></div><div class="lp-mock-chart-bar-lbl">Rev.</div></div>
+        <div class="lp-mock-chart-bar-wrap"><div class="lp-mock-chart-bar" style="height:62%"></div><div class="lp-mock-chart-bar-lbl">AUM</div></div>
         <div class="lp-mock-chart-bar-wrap"><div class="lp-mock-chart-bar lp-bar-orange" style="height:40%"></div><div class="lp-mock-chart-bar-lbl">Found.</div></div>
-        <div class="lp-mock-chart-bar-wrap"><div class="lp-mock-chart-bar" style="height:55%"></div><div class="lp-mock-chart-bar-lbl">Ops.</div></div>
+        <div class="lp-mock-chart-bar-wrap"><div class="lp-mock-chart-bar" style="height:55%"></div><div class="lp-mock-chart-bar-lbl">Risk</div></div>
       </div>
       <div class="lp-mock-ledger">
         <div class="lp-mock-ledger-hdr">
@@ -63,7 +64,7 @@ _HERO_HTML = """
         </div>
         <div class="lp-mock-ledger-row">
           <span class="lp-mock-ledger-dot lp-dot-orange"></span>
-          <span class="lp-mock-ledger-name">Demand Sensing AI</span>
+          <span class="lp-mock-ledger-name">Trade Recon & Ops</span>
           <span class="lp-mock-ledger-val">$18.5M</span>
         </div>
         <div class="lp-mock-ledger-row lp-mock-ledger-alt">
@@ -73,7 +74,7 @@ _HERO_HTML = """
         </div>
         <div class="lp-mock-ledger-row">
           <span class="lp-mock-ledger-dot lp-dot-green"></span>
-          <span class="lp-mock-ledger-name">Trade Promo Opt.</span>
+          <span class="lp-mock-ledger-name">Research Amplification</span>
           <span class="lp-mock-ledger-val">$14.2M</span>
         </div>
       </div>
@@ -92,7 +93,7 @@ _OVERVIEW_HTML = """
     <div class="lp-feat-card" style="border: 1px solid var(--border); padding: 24px;">
       <div class="lp-feat-title" style="margin-top: 0; color: var(--pwc-orange);">01 &nbsp;&middot;&nbsp; Peer Benchmarks</div>
       <div class="lp-feat-desc">
-        Capital allocation triangulated against 10+ public FMCG leaders including P&G, Nestle, and Unilever.
+        Capital allocation triangulated against 10+ public BFSI leaders including BlackRock, Vanguard, and Fidelity.
       </div>
     </div>
     <div class="lp-feat-card" style="border: 1px solid var(--border); padding: 24px;">
@@ -115,25 +116,25 @@ _PEER_STRIP_HTML = """
 <div class="lp-peer-strip">
   <div class="lp-peer-strip-label">PEER INTELLIGENCE CORPUS</div>
   <div class="lp-peer-strip-logos">
-    <span class="lp-peer-name">Procter &amp; Gamble</span>
+    <span class="lp-peer-name">BlackRock</span>
     <span class="lp-peer-sep">&middot;</span>
-    <span class="lp-peer-name">Nestle</span>
+    <span class="lp-peer-name">Vanguard</span>
     <span class="lp-peer-sep">&middot;</span>
-    <span class="lp-peer-name">Unilever</span>
+    <span class="lp-peer-name">Fidelity</span>
     <span class="lp-peer-sep">&middot;</span>
-    <span class="lp-peer-name">Coca-Cola</span>
+    <span class="lp-peer-name">State Street</span>
     <span class="lp-peer-sep">&middot;</span>
-    <span class="lp-peer-name">Mondelez</span>
+    <span class="lp-peer-name">J.P. Morgan AM</span>
     <span class="lp-peer-sep">&middot;</span>
-    <span class="lp-peer-name">Reckitt Benckiser</span>
+    <span class="lp-peer-name">Goldman Sachs AM</span>
     <span class="lp-peer-sep">&middot;</span>
-    <span class="lp-peer-name">Colgate-Palmolive</span>
+    <span class="lp-peer-name">Morgan Stanley</span>
     <span class="lp-peer-sep">&middot;</span>
-    <span class="lp-peer-name">Danone</span>
+    <span class="lp-peer-name">BNY Mellon</span>
     <span class="lp-peer-sep">&middot;</span>
-    <span class="lp-peer-name">Marico</span>
+    <span class="lp-peer-name">Amundi</span>
     <span class="lp-peer-sep">&middot;</span>
-    <span class="lp-peer-name">ITC</span>
+    <span class="lp-peer-name">UBS AM</span>
   </div>
 </div>
 """
@@ -141,7 +142,7 @@ _PEER_STRIP_HTML = """
 _DISCLAIMER_HTML = """
 <div class="lp-footer-disc">
   <strong>Disclaimer:</strong> Output is intended for strategic planning and executive discussion.
-  Financial projections are derived from publicly available FMCG industry benchmark data and
+  Financial projections are derived from publicly available BFSI industry benchmark data and
   should be validated against internal actuals before board submission.
 </div>
 """
@@ -158,16 +159,14 @@ def render_landing_page() -> None:
     # Hero section
     st.html(_HERO_HTML)
 
-    # Primary CTA
-    _, col_cta, _ = st.columns([1, 2, 1])
-    with col_cta:
-        if st.button(
-            "Begin Assessment  \u2192",
-            key="btn_begin_top",
-            use_container_width=True,
-        ):
-            st.session_state.app_phase = 1
-            st.rerun()
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        btn_cols = st.columns([1, 2, 1])
+        with btn_cols[1]:
+            if st.button("Begin Assessment", use_container_width=True, type="primary"):
+                st.session_state.app_phase = 1
+                st.rerun()
 
     # Informational sections
     st.html(_OVERVIEW_HTML)

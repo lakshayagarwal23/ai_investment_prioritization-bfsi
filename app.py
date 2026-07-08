@@ -13,14 +13,14 @@ import streamlit as st
 
 # Must be the first Streamlit call
 st.set_page_config(
-    page_title="AI Investment Engine — FMCG",
+    page_title="AI Investment Engine — BFSI",
     page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
         "Get Help": None,
         "Report a bug": None,
-        "About": "AI Investment Engine — FMCG C-Suite Edition",
+        "About": "AI Investment Engine — BFSI C-Suite Edition",
     },
 )
 
@@ -29,9 +29,9 @@ from ui.landing import render_landing_page
 from ui.sidebar import (
     init_session_state,
     render_sidebar_branding,
-    render_intake_form,
+    render_intake_wizard,
 )
-from ui.dashboard import render_full_dashboard
+from ui.dashboard import render_dashboard
 from storage.audit import init_db
 
 def main() -> None:
@@ -55,10 +55,10 @@ def main() -> None:
         render_landing_page()
     elif phase == 1:
         # Phase 1: Full-width unified intake form
-        render_intake_form()
+        render_intake_wizard()
     else:
         # Phase 3: Full-width AI investment prioritisation dashboard
-        render_full_dashboard()
+        render_dashboard()
 
 
 if __name__ == "__main__":
