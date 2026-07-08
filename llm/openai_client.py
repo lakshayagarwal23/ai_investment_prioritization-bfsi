@@ -51,35 +51,37 @@ def generate_executive_summary(company: str, plan: list[dict], answers: dict, se
     )
     
     # 2. Prompt Gemini for the hero narrative
-    client = genai.Client(api_key=GEMINI_API_KEY)
-    
-    prompt = f"""
-    You are a tier-1 management consultant (McKinsey/PwC) advising the C-suite of {company}, a firm in the {sector} sector.
-    We have just generated an AI Use Case Prioritization Matrix for them. 
-    
-    The top 'Strategic Bets' are: {', '.join(top_levers)}.
-    
-    Write a 3-paragraph executive memo explaining WHY a matrix-driven approach is critical for AI transformation, rather than random experimentation. 
-    Focus on how we balanced "Business Impact" vs "Feasibility" (data readiness, legacy constraints) to place these specific use cases in the 'Strategic Bets' quadrant. 
-    
-    CRITICAL: Contextualize this memo for the modern Indian BFSI landscape. Weave in references to macro-trends like the scale of UPI, the Account Aggregator ecosystem, the necessity of vernacular/multilingual Conversational AI to reach India's 960M internet users, and the industry's shift towards autonomous "Agentic AI" (rather than just digital or predictive AI). Make it sound like cutting-edge research from a 2026 industry report.
-    
-    Do NOT include any financial calculations, ROIs, NPVs, or dollar amounts.
-    Tone: Professional, strategic, visionary, C-suite ready.
-    Format: Output exactly 3 HTML paragraphs (<p style="font-size:13.5px;line-height:1.75;color:#374151;">). Do not include the <h2> title or markdown code blocks.
-    """
-    
-    try:
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt
-        )
-        ai_narrative = response.text.replace("```html", "").replace("```", "")
-    except Exception as e:
-        print(f"Gemini API Error: {e}")
-        ai_narrative = f'''<p style="font-size:13.5px;line-height:1.75;color:#374151;">
-AI transformation fails when firms chase hype rather than feasibility. For <strong>{company}</strong>, success requires a disciplined, matrix-driven approach that plots use cases against actual data readiness and business impact.
-</p>'''
+    if not GEMINI_API_KEY:
+        ai_narrative = "<div class='bfsi-diag-bad' style='padding: 12px; margin-bottom: 20px;'><strong>Configuration Error:</strong> GEMINI_API_KEY is missing. Narrative generation is disabled. Please provide a valid API key to enable LLM features.</div>"
+    else:
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        prompt = f"""
+        You are a tier-1 management consultant (McKinsey/PwC) advising the C-suite of {company}, a firm in the {sector} sector.
+        We have just generated an AI Use Case Prioritization Matrix for them. 
+        
+        The top 'Strategic Bets' are: {', '.join(top_levers)}.
+        
+        Write a 3-paragraph executive memo explaining WHY a matrix-driven approach is critical for AI transformation, rather than random experimentation. 
+        Focus on how we balanced "Business Impact" vs "Feasibility" (data readiness, legacy constraints) to place these specific use cases in the 'Strategic Bets' quadrant. 
+        
+        CRITICAL: Contextualize this memo for the modern Indian BFSI landscape. Weave in references to macro-trends like the scale of UPI, the Account Aggregator ecosystem, the necessity of vernacular/multilingual Conversational AI to reach India's 960M internet users, and the industry's shift towards autonomous "Agentic AI" (rather than just digital or predictive AI). Make it sound like cutting-edge research from a 2026 industry report.
+        
+        Do NOT include any financial calculations, ROIs, NPVs, or dollar amounts.
+        Tone: Professional, strategic, visionary, C-suite ready.
+        Format: Output exactly 3 HTML paragraphs (<p style="font-size:13.5px;line-height:1.75;color:#374151;">). Do not include the <h2> title or markdown code blocks.
+        """
+        
+        try:
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt
+            )
+            ai_narrative = response.text.replace("```html", "").replace("```", "")
+        except Exception as e:
+            print(f"Gemini API Error: {e}")
+            ai_narrative = f'''<p style="font-size:13.5px;line-height:1.75;color:#374151;">
+            AI transformation fails when firms chase hype rather than feasibility. For <strong>{company}</strong>, success requires a disciplined, matrix-driven approach that plots use cases against actual data readiness and business impact.
+            </p>'''
 
     # 3. Build the Memo HTML
     memo = f"""

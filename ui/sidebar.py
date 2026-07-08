@@ -4,6 +4,7 @@ ui/sidebar.py — Premium BFSI intake wizard with card-based HTML layout.
 from __future__ import annotations
 import streamlit as st
 import time
+import html
 from config.questions import (
     SECTIONS, QUESTIONS, get_questions_for_section, OTHER_OPTION, OBJECTIVE_INPUTS
 )
@@ -133,9 +134,10 @@ def _page_company() -> None:
     """)
 
     if st.session_state.company_name:
+        safe_company = html.escape(st.session_state.company_name)
         st.html(f"""<div class="bfsi-q-card">
             <div class="bfsi-q-label" style="color: #6b7280;">Target Firm</div>
-            <div style="font-size: 16px; font-weight: 700; color: #1E3A8A;">{st.session_state.company_name}</div>
+            <div style="font-size: 16px; font-weight: 700; color: #1E3A8A;">{safe_company}</div>
         </div>""")
         comp_sel = st.session_state.company_name
         custom = ""
@@ -176,12 +178,17 @@ def _advance_company(sel, custom, goals, sector):
             with st.spinner(f"🔍 Searching web for {company} data to prefill..."):
                 extracted_data = extract_company_data(company)
                 
-                # Auto-correct the company name if Gemini found the official spelling
-                official_name = extracted_data.pop("company_name", None)
-                if official_name:
-                    st.session_state.company_name = official_name
+                if "error" not in extracted_data:
+                    st.session_state._search_success = True
+                    # Auto-correct the company name if Gemini found the official spelling
+                    official_name = extracted_data.pop("company_name", None)
+                    if official_name:
+                        st.session_state.company_name = official_name
+                        
+                    st.session_state.discovery_answers.update(extracted_data)
+                else:
+                    st.session_state._search_success = False
                     
-                st.session_state.discovery_answers.update(extracted_data)
                 st.session_state._search_completed = True
                 
     st.session_state.wizard_page += 1
@@ -199,15 +206,19 @@ def _page_section(idx: int) -> None:
         <div class="bfsi-section-banner-title">{title}</div>
         <div class="bfsi-section-banner-desc">{desc}</div>
     </div>
-    
-    <div style="background: #fdfaf5; border: 1px solid #f2dfce; padding: 12px 16px; border-radius: 6px; margin-bottom: 24px;">
-        <div style="font-size: 12.5px; color: #8c5020; line-height: 1.5;">
-            <strong>⚠️ Data Pre-filled via Web Search.</strong> 
-            Preliminary information for <strong>{st.session_state.company_name}</strong> has been extracted automatically. 
-            Please verify these values. Questions regarding internal metrics (e.g., Data Silos, KTLO) must be manually entered.
-        </div>
-    </div>
     """)
+    
+    if getattr(st.session_state, '_search_success', False):
+        safe_company = html.escape(st.session_state.company_name)
+        st.html(f"""
+        <div style="background: #fdfaf5; border: 1px solid #f2dfce; padding: 12px 16px; border-radius: 6px; margin-bottom: 24px;">
+            <div style="font-size: 12.5px; color: #8c5020; line-height: 1.5;">
+                <strong>⚠️ Data Pre-filled via Web Search.</strong> 
+                Preliminary information for <strong>{safe_company}</strong> has been extracted automatically. 
+                Please verify these values. Questions regarding internal metrics (e.g., Data Silos, KTLO) must be manually entered.
+            </div>
+        </div>
+        """)
 
     answers = st.session_state.discovery_answers
     sector = st.session_state.get("target_sector", "all")

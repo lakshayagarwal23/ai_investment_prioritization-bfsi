@@ -27,7 +27,7 @@ def render_dashboard() -> None:
 
     plan = st.session_state.thesis_plan or []
     answers = st.session_state.discovery_answers or {}
-    company = st.session_state.company_name or "The Firm"
+    company = html.escape(st.session_state.company_name) if st.session_state.company_name else "The Firm"
 
     _render_kpi_header(plan, answers, company)
 
@@ -38,7 +38,7 @@ def render_dashboard() -> None:
         "Risk & Competitiveness",
     ])
     with tab1: _tab_matrix(plan)
-    with tab2: _tab_deprecation(answers)
+    with tab2: _tab_deprecation(answers, plan)
     with tab3: _tab_memo()
     with tab4: _tab_risk_competitive(plan, answers)
 
@@ -190,93 +190,83 @@ def _tab_matrix(plan: list[dict]) -> None:
 
 # ── Tab 2: Legacy Deprecation ──────────────────────────────────────────────
 
-def _tab_deprecation(answers: dict) -> None:
+def _tab_deprecation(answers: dict, plan: list[dict]) -> None:
     st.html('<div class="bfsi-report-h2">Legacy System Deprecation Diagnostic</div>')
 
-    ktlo       = answers.get("S1_KTLO", 72)
-    silos      = answers.get("S1_SILO", 5)
-    maint_cost = answers.get("S5_MAINTENANCE_COST", 6.5)
-    biz_val    = answers.get("S5_BIZ_VALUE", 20.0)
-    gov_raw    = _governance(answers)
+    # Platform-gated levers that depend on killing legacy
+    PLATFORM_GATED_LEVERS = {"lever_2", "lever_8", "lever_11", "lever_13"}
+    unlocked_anv_m = sum(p["anv"] for p in plan if p.get("id") in PLATFORM_GATED_LEVERS) / 1e6
 
-    # Sub-scores
-    td_ratio = min(1.0, maint_cost / max(biz_val, 0.01))
-    tech_debt = min(100, td_ratio * 100)
-    frag      = min(100, silos * 15)
-    gov_inv   = 100 - gov_raw
-    dep_score = calculate_deprecation_score(tech_debt, frag, gov_raw)
+    # Instantiate inputs
+    inputs = LegacyInputs(
+        maintenance_cost_m=answers.get("S5_MAINTENANCE_COST", 6.5),
+        biz_value_m=answers.get("S5_BIZ_VALUE", 20.0),
+        silo_count=answers.get("S1_SILO", 5.0),
+        architecture=answers.get("S1_ARCH", "Hybrid — partial cloud, many point-to-point feeds"),
+        api_maturity=answers.get("S1_API_GATEWAY", "Internal REST APIs (Point-to-point)"),
+        data_ownership=answers.get("S5_DATA_OWNERSHIP", 55.0),
+        lineage=answers.get("S5_LINEAGE", 35.0),
+        dq_sla=answers.get("S5_DQ_SLA", 72.0),
+        reg_trace=answers.get("S5_REGULATORY_TRACE", 50.0),
+        change_mgmt=answers.get("S5_CHANGE_MGMT", 45.0),
+        unlocked_anv_m=unlocked_anv_m,
+        rebuild_cost_m=None  # Can be added to questionnaire later
+    )
 
-    # Diagnostic table
-    def _gap(val, bad_thresh, warn_thresh, fmt="{:.0f}"):
-        v = fmt.format(val)
-        if val >= bad_thresh:  return f'<td class="bfsi-diag-bad">{v} ⚠</td>'
-        if val >= warn_thresh: return f'<td class="bfsi-diag-warn">{v} △</td>'
-        return f'<td class="bfsi-diag-ok">{v} ✓</td>'
+    result = run_diagnostic(inputs)
+    pillars = result["pillars"]
 
-    st.html(f"""
-    <table class="bfsi-diag-table">
-        <thead><tr><th>Metric</th><th>Your Firm</th><th>Industry Threshold</th><th>Sub-Score</th></tr></thead>
-        <tbody>
-            <tr><td>KTLO Ratio (% IT on Run-the-Bank)</td>{_gap(ktlo,75,65,"{:.0f}%")}<td>&lt;65% = Healthy</td><td>{tech_debt:.0f}/100</td></tr>
-            <tr><td>Data Silos (core entities)</td>{_gap(silos,5,3,"{:.0f}")}<td>&lt;3 = Golden Source</td><td>{frag:.0f}/100</td></tr>
-            <tr><td>Tech Debt Interest Ratio</td>{_gap(td_ratio*100,60,35,"{:.0f}%")}<td>&lt;35% = Watch</td><td>{tech_debt:.0f}/100</td></tr>
-            <tr><td>Governance Readiness</td><td class="{'bfsi-diag-bad' if gov_raw<40 else 'bfsi-diag-warn' if gov_raw<60 else 'bfsi-diag-ok'}">{gov_raw:.0f}/100</td><td>&gt;50 = Safe to Rebuild</td><td>{gov_inv:.0f}/100</td></tr>
-        </tbody>
-    </table>
-    """)
-
-    # Gauge
     col1, col2 = st.columns([1, 1])
     with col1:
-        fig = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=dep_score,
-            number={"suffix": "/100", "font": {"size": 32, "color": "#11161C"}},
-            title={"text": "Deprecation Score", "font": {"size": 13, "color": "#6b7280"}},
-            gauge={
-                "axis": {"range": [0, 100], "tickfont": {"size": 10}},
-                "bar": {"color": "#11161C", "thickness": 0.25},
-                "steps": [
-                    {"range": [0,  40], "color": "#d1fae5"},
-                    {"range": [40, 70], "color": "#fef3c7"},
-                    {"range": [70, 100], "color": "#fee2e2"},
-                ],
-                "threshold": {"line": {"color": "#D04A02", "width": 3}, "thickness": 0.75, "value": dep_score},
-            }
-        ))
-        fig.update_layout(height=260, margin=dict(l=20, r=20, t=30, b=10), paper_bgcolor="white")
-        st.plotly_chart(fig, use_container_width=True)
-
-    with col2:
-        if dep_score >= 70 and gov_raw >= 50:
-            vcls, vtitle, vbody = "bfsi-verdict-kill", "VERDICT: KILL & REBUILD", \
-                f"Legacy maintenance is cannibalizing the AI budget. Decommission the fragmented stack and rebuild on a Cloud-Native / Data Mesh architecture. Freed KTLO savings ({ktlo}% → target 50%) directly fund the Strategic Bets in Tab 1."
-        elif dep_score >= 70 and gov_raw < 50:
-            vcls, vtitle, vbody = "bfsi-verdict-blocked", "VERDICT: REBUILD-BLOCKED", \
-                f"Strong case to kill the legacy system, but governance readiness ({gov_raw:.0f}/100) is below the safe-rebuild threshold of 50. Execute a 6-week Stage-0 governance remediation before committing to rebuild. Rushing this will fail."
-        elif dep_score >= 40:
-            vcls, vtitle, vbody = "bfsi-verdict-modern", "VERDICT: MODERNIZE", \
-                "Implement a strangler-fig pattern: extract highest-value microservices incrementally without a big-bang rebuild. Prioritise the data layer first (Lever 9) to unblock the Park quadrant levers."
-        else:
-            vcls, vtitle, vbody = "bfsi-verdict-hold", "VERDICT: HOLD & OPTIMIZE", \
-                "Core systems are healthy. Proceed directly with Agentic AI overlays on the existing stack. Focus capital on the Strategic Bets — no rebuild cost drag."
-
+        # Verdict Card
+        vcls = "bfsi-verdict-modern"
+        if result["verdict"] == "KILL & REBUILD": vcls = "bfsi-verdict-kill"
+        elif result["verdict"] == "REBUILD-BLOCKED": vcls = "bfsi-verdict-blocked"
+        elif result["verdict"] == "HOLD & OPTIMIZE": vcls = "bfsi-verdict-hold"
+        
         st.html(f"""
-        <div class="bfsi-verdict {vcls}">
-            <div class="bfsi-verdict-title">{vtitle}</div>
-            <div class="bfsi-verdict-body">{vbody}</div>
+        <div class="bfsi-verdict-card {vcls}">
+            <h3>VERDICT: {result['verdict']}</h3>
+            <p><strong>Architecture Pattern:</strong> {result['pattern']}</p>
+            <p>{result['rationale']}</p>
         </div>
         """)
 
-        # Funding linkage
-        annual_save = maint_cost * 0.60  # free 60% of maintenance on kill
+    with col2:
+        # Diagnostic Table
         st.html(f"""
-        <div class="bfsi-callout">
-            <strong>Kill-to-Fund:</strong> Deprecating the legacy stack at current KTLO ratio frees
-            ~<span class="bfsi-stat-inline">${annual_save:.1f}M/yr</span> in maintenance savings —
-            directly financing the Strategic Bets identified in Tab 1 with
-            <span class="bfsi-stat-inline">no incremental capital ask</span>.
-        </div>
+        <table class="bfsi-diag-table">
+            <thead><tr><th>Pillar</th><th>Score</th></tr></thead>
+            <tbody>
+                <tr><td>Tech Debt Score</td><td>{pillars['tech_debt_score']}/100</td></tr>
+                <tr><td>Fragmentation Score</td><td>{pillars['fragmentation_score']}/100</td></tr>
+                <tr><td>Governance Readiness</td><td>{pillars['governance_readiness']}/100</td></tr>
+                <tr><td><strong>Overall Deprecation Score</strong></td><td><strong>{result['deprecation_score']}/100</strong></td></tr>
+            </tbody>
+        </table>
+        """)
+
+    # Self Funding Horizon
+    if result.get("self_funding"):
+        sf = result["self_funding"]
+        st.html('<div class="bfsi-report-h2" style="margin-top: 2rem;">Self-Funding Horizon</div>')
+        payback_str = f"{sf['payback_months']} months" if sf['payback_months'] else "Does not pay back"
+        funding_gap_str = f"${sf['first_year_funding_gap_m']}M"
+        if sf['first_year_funding_gap_m'] <= 0:
+            funding_gap_str = "<span style='color:green;'>Fully Funded</span>"
+        
+        st.html(f"""
+        <table class="bfsi-diag-table">
+            <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+            <tbody>
+                <tr><td>Legacy Annual Savings (Retained)</td><td>${sf['legacy_annual_savings_m']}M</td></tr>
+                <tr><td>Unlocked AI Value (Platform-Gated)</td><td>${sf['unlocked_anv_m']}M</td></tr>
+                <tr><td><strong>Total Annual Value</strong></td><td><strong>${sf['total_annual_value_m']}M</strong></td></tr>
+                <tr><td>Rebuild Capex {"(Estimated)" if sf['rebuild_cost_estimated'] else ""}</td><td>${sf['rebuild_cost_m']}M</td></tr>
+                <tr><td>First Year Funding Gap</td><td>{funding_gap_str}</td></tr>
+                <tr><td><strong>Payback Period</strong></td><td><strong>{payback_str}</strong></td></tr>
+            </tbody>
+        </table>
         """)
 
 

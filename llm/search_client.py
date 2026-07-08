@@ -13,8 +13,9 @@ def extract_company_data(company_name: str) -> dict:
     Searches the internet for the company and extracts key metrics into a dict 
     matching the questionnaire keys.
     """
-    # The API key was hardcoded in openai_client.py previously, so we'll fallback to it if not in env
     api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return {"error": "Missing GEMINI_API_KEY"}
         
     client = genai.Client(api_key=api_key)
     

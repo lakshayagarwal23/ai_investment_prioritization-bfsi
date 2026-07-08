@@ -29,7 +29,7 @@ _HERO_HTML = """
       <span class="lp-tag">Bottom-Up Financial Modeling</span>
       <span class="lp-tag">10+ Peer Benchmarks</span>
       <span class="lp-tag">Risk-Adjusted Projections</span>
-      <span class="lp-tag">GPT-4o Intelligence</span>
+      <span class="lp-tag">Deterministic AI Valuation</span>
     </div>
   </div>
   <div class="lp-hero-right">
@@ -41,8 +41,8 @@ _HERO_HTML = """
       </div>
       <div class="lp-mock-kpi-row">
         <div class="lp-mock-kpi lp-kpi-orange">
-          <div class="lp-mock-kpi-num">185%</div>
-          <div class="lp-mock-kpi-lbl">Portfolio ROI</div>
+          <div class="lp-mock-kpi-num">Value</div>
+          <div class="lp-mock-kpi-lbl">Strategic Bets</div>
         </div>
         <div class="lp-mock-kpi lp-kpi-blue">
           <div class="lp-mock-kpi-num">21mo</div>
