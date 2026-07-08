@@ -59,11 +59,12 @@ def generate_executive_summary(company: str, plan: list[dict], answers: dict, se
         Write a 3-paragraph executive memo explaining WHY a matrix-driven approach is critical for AI transformation, rather than random experimentation. 
         Focus on how we balanced "Business Impact" vs "Feasibility" (data readiness, legacy constraints) to place these specific use cases in the 'Strategic Bets' quadrant. 
         
-        CRITICAL: Contextualize this memo for the modern Indian BFSI landscape. Weave in references to macro-trends like the scale of UPI, the Account Aggregator ecosystem, the necessity of vernacular/multilingual Conversational AI to reach India's 960M internet users, and the industry's shift towards autonomous "Agentic AI" (rather than just digital or predictive AI). Make it sound like cutting-edge research from a 2026 industry report.
-        
-        Do NOT include any financial calculations, ROIs, NPVs, or dollar amounts.
-        Tone: Professional, strategic, visionary, C-suite ready.
-        Format: Output exactly 3 HTML paragraphs (<p class="hz-p">). Do not include the <h2> title or markdown code blocks.
+        CRITICAL INSTRUCTIONS:
+        - Base all claims strictly on the provided Strategic Bets and the concepts of technical debt, legacy architecture, and data governance.
+        - Do NOT hallucinate specific technologies or generic industry buzzwords (e.g., do NOT mention UPI, Account Aggregator, or MAUDE unless they are explicitly in the provided Strategic Bets).
+        - Do NOT include any financial calculations, ROIs, NPVs, or dollar amounts.
+        - Tone: Professional, strategic, visionary, C-suite ready.
+        - Format: Output exactly 3 HTML paragraphs (<p class="hz-p">). Do not include the <h2> title or markdown code blocks.
         """
         
         try:

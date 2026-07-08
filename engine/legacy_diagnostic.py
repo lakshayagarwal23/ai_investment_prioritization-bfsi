@@ -16,14 +16,29 @@ def calculate_tech_debt_score(annual_maintenance_cost: float, business_value_del
     tech_debt_score = min(100.0, tech_debt_interest_ratio * scaling_factor)
     return tech_debt_score
 
-def calculate_fragmentation_score(silo_count: int, redundancy_factor: float, integration_complexity: float, data_domains: int) -> float:
+def calculate_fragmentation_score(silo_count: int, architecture: str, api_maturity: str) -> float:
     """
     Calculates the Data Fragmentation Score (Weight 35%).
     """
-    if data_domains == 0:
-        return 100.0
-    fragmentation_index = (silo_count * redundancy_factor * integration_complexity) / data_domains
-    fragmentation_score = min(100.0, fragmentation_index * 20)  # simple linear scaling
+    base = min(100.0, silo_count * 12.5)
+
+    arch_lower = architecture.lower()
+    if "siloed on-premises" in arch_lower:
+        arch_modifier = 1.2
+    elif "cloud-native" in arch_lower:
+        arch_modifier = 0.5
+    else:
+        arch_modifier = 1.0
+
+    api_lower = api_maturity.lower()
+    if "batch" in api_lower or "etl" in api_lower:
+        api_modifier = 1.3
+    elif "graphql" in api_lower or "event-driven" in api_lower:
+        api_modifier = 0.6
+    else:
+        api_modifier = 1.0
+
+    fragmentation_score = min(100.0, base * arch_modifier * api_modifier)
     return fragmentation_score
 
 def calculate_governance_readiness_score(data_ownership_clarity: float, lineage_coverage_pct: float,
@@ -67,16 +82,22 @@ class LegacyInputs:
 
 def run_diagnostic(inputs: LegacyInputs) -> dict:
     td_score = calculate_tech_debt_score(inputs.maintenance_cost_m, inputs.biz_value_m)
-    frag_score = calculate_fragmentation_score(int(inputs.silo_count), 1.0, 1.0, 5)
+    frag_score = calculate_fragmentation_score(int(inputs.silo_count), inputs.architecture, inputs.api_maturity)
     gov_score = calculate_governance_readiness_score(inputs.data_ownership, inputs.lineage, inputs.dq_sla, inputs.reg_trace, inputs.change_mgmt)
     
     dep_score = calculate_deprecation_score(td_score, frag_score, gov_score)
     verdict = get_deprecation_verdict(dep_score, gov_score)
     
+    # Financials
+    rebuild_cost = inputs.rebuild_cost_m if inputs.rebuild_cost_m is not None else (inputs.maintenance_cost_m * 3.5)
+    legacy_annual_savings = inputs.maintenance_cost_m * 0.65
+    
+    funding_metrics = calculate_funding_metrics(rebuild_cost, legacy_annual_savings, inputs.unlocked_anv_m)
+    
     return {
         "verdict": verdict,
         "pattern": inputs.architecture,
-        "rationale": "Computed from technical debt and fragmentation heuristics.",
+        "rationale": f"Computed dynamically: Tech Debt ({td_score:.1f}/100) vs Fragmentation ({frag_score:.1f}/100)",
         "pillars": {
             "tech_debt_score": round(td_score),
             "fragmentation_score": round(frag_score),
@@ -84,13 +105,13 @@ def run_diagnostic(inputs: LegacyInputs) -> dict:
         },
         "deprecation_score": round(dep_score),
         "self_funding": {
-            "legacy_annual_savings_m": round(inputs.maintenance_cost_m, 1),
+            "legacy_annual_savings_m": round(legacy_annual_savings, 1),
             "unlocked_anv_m": round(inputs.unlocked_anv_m, 1),
-            "total_annual_value_m": round(inputs.maintenance_cost_m + inputs.unlocked_anv_m, 1),
-            "rebuild_cost_estimated": True,
-            "rebuild_cost_m": 15.0,
-            "first_year_funding_gap_m": round(15.0 - (inputs.maintenance_cost_m + inputs.unlocked_anv_m), 1),
-            "payback_months": 18
+            "total_annual_value_m": round(legacy_annual_savings + inputs.unlocked_anv_m, 1),
+            "rebuild_cost_estimated": inputs.rebuild_cost_m is None,
+            "rebuild_cost_m": round(rebuild_cost, 1),
+            "first_year_funding_gap_m": round(funding_metrics["rebuild_funding_gap"], 1),
+            "payback_months": round(funding_metrics["self_funding_horizon_months"]) if funding_metrics["self_funding_horizon_months"] != float('inf') else None
         }
     }
 

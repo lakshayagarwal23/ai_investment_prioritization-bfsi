@@ -315,6 +315,17 @@ def _generate(budget):
             st.session_state.discovery_answers,
             st.session_state.get("target_sector", "Financial Services")
         )
+        
+        from storage.audit import log_run
+        run_id = log_run(
+            company=st.session_state.company_name,
+            inputs=st.session_state.discovery_answers,
+            plan=plan,
+            payload={"summary": st.session_state.thesis_summary},
+            mode="interactive"
+        )
+        st.session_state.last_run_id = run_id
+        
         st.session_state.thesis_generated = True
         st.session_state.app_phase = 2
     st.rerun()
