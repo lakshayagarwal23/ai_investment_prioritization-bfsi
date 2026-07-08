@@ -50,24 +50,49 @@ def init_session_state() -> None:
 def render_sidebar_branding() -> None:
     phase = st.session_state.app_phase
     with st.sidebar:
-        # We don't render a big dark brand box anymore; keep it clean.
         st.write("")
         if phase >= 2:
+            st.html("""
+            <div style="font-family: var(--font-head); font-size: 24px; color: var(--pwc-orange); font-weight: bold; margin-bottom: var(--sp-4); padding-bottom: 8px; border-bottom: 1px solid var(--g200);">
+                pwc
+            </div>
+            """)
+            
+            # Scenario Selector in Sidebar
+            st.html("""
+            <div style="font-family: var(--font-head); font-size: 15px; color: var(--black); margin-bottom: var(--sp-2);">
+                Execution Scenario
+            </div>
+            """)
+            scenarios = ["conservative", "base", "aggressive"]
+            current_sc = st.session_state.get("current_scenario", "base")
+            scenario = st.radio("Execution Scenario", scenarios, index=scenarios.index(current_sc), label_visibility="collapsed")
+            if scenario != current_sc:
+                st.session_state.current_scenario = scenario
+                from engine.math_engine import build_investment_plan
+                st.session_state.thesis_plan = build_investment_plan(
+                    st.session_state.discovery_answers, 
+                    st.session_state.budget_usd_m, 
+                    st.session_state.primary_goals,
+                    scenario=scenario
+                )
+                st.rerun()
+                
+            st.write("")
             if st.button("← Restart Analysis", use_container_width=True):
                 for k in list(st.session_state.keys()):
                     del st.session_state[k]
                 st.rerun()
         else:
-            # We can put a light navigation summary or just empty space.
+            # Clean minimalistic placeholder for the wizard stage to prevent redundancy
             st.html("""
-            <div style="font-family: var(--font-head); font-size: 16px; color: var(--black); margin-bottom: 24px; border-bottom: 1px solid var(--g200); padding-bottom: 8px;">
-                Diagnostic Status
+            <div style="font-family: var(--font-head); font-size: 24px; color: var(--pwc-orange); font-weight: bold; margin-bottom: 24px; padding-bottom: 8px; border-bottom: 1px solid var(--g200);">
+                pwc
+            </div>
+            <div style="font-size: 13px; color: var(--g500); line-height: 1.4;">
+                C-Suite Transformation Advisory Platform
             </div>
             """)
-            page = st.session_state.wizard_page
-            for i, label in enumerate(STEPPER_LABELS):
-                cls = "hz-nav-active" if i == page else ""
-                st.html(f'<div class="hz-nav-item {cls}">{i+1}. {label}</div>')
 
 def _stepper(current: int) -> None:
     parts = []
@@ -75,14 +100,22 @@ def _stepper(current: int) -> None:
         if i == current:
             state = "active"
             num = str(i+1)
+            active_lbl = "active"
         elif i < current:
             state = "done"
             num = "✓"
+            active_lbl = ""
         else:
             state = "todo"
             num = str(i+1)
+            active_lbl = ""
         
-        parts.append(f'<div class="hz-step"><div class="hz-step-sq {state}">{num}</div></div>')
+        parts.append(
+            f'<div class="hz-step">'
+            f'  <div class="hz-step-sq {state}">{num}</div>'
+            f'  <div class="hz-step-lbl {active_lbl}">{label}</div>'
+            f'</div>'
+        )
         if i < len(STEPPER_LABELS) - 1:
             parts.append('<div class="hz-step-rule"></div>')
             
@@ -334,11 +367,11 @@ def _generate(budget):
 
 def _nav_buttons(back_fn, next_label: str, next_fn) -> None:
     st.write("")
-    col_back, _, col_next = st.columns([1, 2, 2])
+    col_back, _, col_next = st.columns([1.5, 3, 1.5])
     with col_back:
         if back_fn and st.session_state.wizard_page > 0:
-            if st.button("Back", use_container_width=True):
+            if st.button("Back", key=f"back_{st.session_state.wizard_page}", use_container_width=True):
                 back_fn()
     with col_next:
-        if st.button(next_label, use_container_width=True, type="primary"):
+        if st.button(next_label, key=f"next_{st.session_state.wizard_page}", type="primary", use_container_width=True):
             next_fn()

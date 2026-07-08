@@ -177,3 +177,15 @@ BFSI_LEVERS = [
         "sectors": ["Life & General Insurance", "Diversified Financial Services"]
     }
 ]
+
+CONSTANTS = {
+    "FTE_Cost_USD_Year": 65000,
+    "Rebuild_Capex_Multiplier": 3.5,
+    "Legacy_Savings_Retention_Rate": 0.65,
+    "Year_1_Ramp_Curve_Pct": 25,
+    "Year_2_Ramp_Curve_Pct": 60,
+    "Year_3_Ramp_Curve_Pct": 100,
+    "Conservative_Haircut_Pct": 50,
+    "Base_Haircut_Pct": 60,
+    "Aggressive_Haircut_Pct": 75
+}

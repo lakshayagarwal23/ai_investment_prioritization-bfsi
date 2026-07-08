@@ -15,33 +15,22 @@ def render_dashboard() -> None:
         st.warning("Please complete the intake form first.")
         return
 
-    scenario = st.radio("Execution Scenario", ["conservative", "base", "aggressive"], index=1, horizontal=True)
-    if scenario != st.session_state.get("current_scenario", "base"):
-        st.session_state.current_scenario = scenario
-        from engine.math_engine import build_investment_plan
-        st.session_state.thesis_plan = build_investment_plan(
-            st.session_state.discovery_answers, 
-            st.session_state.budget_usd_m, 
-            st.session_state.primary_goals,
-            scenario=scenario
-        )
-        st.rerun()
-
     plan = st.session_state.thesis_plan or []
     answers = st.session_state.discovery_answers or {}
     company = html.escape(st.session_state.company_name) if st.session_state.company_name else "The Firm"
-    _render_kpi_header(plan, answers, company)
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "Executive Summary",
         "Prioritization Matrix",
         "Legacy Deprecation",
-        "Strategic Memo",
         "Risk & Competitiveness",
         "Assumptions Appendix"
     ])
-    with tab1: _tab_matrix(plan)
-    with tab2: _tab_deprecation(answers, plan)
-    with tab3: _tab_memo()
+    with tab1:
+        _render_kpi_header(plan, answers, company)
+        _tab_memo()
+    with tab2: _tab_matrix(plan)
+    with tab3: _tab_deprecation(answers, plan)
     with tab4: _tab_risk_competitive(plan, answers)
     with tab5: _tab_assumptions()
 
