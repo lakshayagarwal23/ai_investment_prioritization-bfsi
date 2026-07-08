@@ -2,6 +2,7 @@
 llm/search_client.py
 
 Uses Gemini 2.5 Flash with Google Search Grounding to extract preliminary data about a firm.
+Upgraded to support Tiered Retrieval, Provenance Objects, and JSON Schema validation.
 """
 import os
 import json
@@ -11,7 +12,7 @@ from google.genai import types
 def extract_company_data(company_name: str) -> dict:
     """
     Searches the internet for the company and extracts key metrics into a dict 
-    matching the questionnaire keys.
+    matching the questionnaire keys. Returns provenance objects.
     """
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
@@ -19,19 +20,48 @@ def extract_company_data(company_name: str) -> dict:
         
     client = genai.Client(api_key=api_key)
     
+    provenance_schema = types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "value": types.Schema(type=types.Type.STRING),
+            "source_url": types.Schema(type=types.Type.STRING),
+            "quote": types.Schema(type=types.Type.STRING),
+            "confidence": types.Schema(type=types.Type.STRING, enum=["High", "Med", "Low"])
+        },
+        required=["value", "source_url", "quote", "confidence"]
+    )
+
+    response_schema = types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "company_name": types.Schema(type=types.Type.STRING),
+            "S1_AUM": provenance_schema,
+            "S1_ARCH": provenance_schema,
+            "S1_ERP": provenance_schema,
+            "S2_ANNUAL_UNDERWRITING_APPS": provenance_schema,
+            "S3_ANNUAL_CLAIMS": provenance_schema
+        },
+        required=["company_name"]
+    )
+
     prompt = f"""
     Search the internet for the financial services company: "{company_name}".
-    Find their latest:
-    1. Total Assets Under Management (AUM) in Billions USD (convert to float, e.g. 50.0). If they are an insurance company, use their total premium or AUM equivalent.
-    2. Total Employee Count (convert to float, e.g. 15000.0).
-    3. The official, correctly spelled name of the company (to fix any typos the user might have made).
+    Focus on Tier A sources (regulatory filings, IRDAI disclosures, SEC 10-K) and Tier B sources (Investor Presentations).
     
-    Return EXACTLY a raw JSON object (no markdown formatting, no code blocks) with these keys:
-    {{
-        "S1_AUM": <float value or null if not found>,
-        "S1_EMPLOYEES": <float value or null if not found>,
-        "company_name": <string of the official company name>
-    }}
+    Extract the following metrics if available:
+    1. Total Assets Under Management (AUM) or Gross Written Premium in Billions USD. (S1_AUM)
+    2. Data Architecture (S1_ARCH). Output one of: "Siloed On-Premises (Batch)", "Hybrid — partial cloud", "Cloud-Native (AWS/Azure/GCP)".
+    3. Core ERP/Policy Admin System status (S1_ERP). Output one of: "Legacy monolith (>10 years old)", "On-prem with API layer", "Modern cloud-native".
+    4. Annual life insurance / policy applications (S2_ANNUAL_UNDERWRITING_APPS)
+    5. Annual insurance claims processed (S3_ANNUAL_CLAIMS)
+    
+    Also return the official, correctly spelled name of the company as 'company_name'.
+    
+    For each metric (except company_name), provide a provenance object with:
+    - value: The extracted value as a string (e.g. "50.0" or the exact category).
+    - source_url: The URL where you found this information.
+    - quote: A short excerpt justifying the value.
+    - confidence: "High" (from official Tier A/B docs), "Med" (from press releases/Tier C), or "Low" (inferred/estimated).
     """
     
     try:
@@ -40,22 +70,15 @@ def extract_company_data(company_name: str) -> dict:
             contents=prompt,
             config=types.GenerateContentConfig(
                 tools=[{"google_search": {}}],
-                temperature=0.0
+                temperature=0.0,
+                response_mime_type="application/json",
+                response_schema=response_schema
             )
         )
         
-        # Clean the response to ensure it's pure JSON
-        text = response.text.strip()
-        if text.startswith("```json"):
-            text = text[7:]
-        elif text.startswith("```"):
-            text = text[3:]
-        if text.endswith("```"):
-            text = text[:-3]
-            
-        data = json.loads(text.strip())
+        data = json.loads(response.text)
         
-        # Filter out nulls so we don't overwrite defaults with null
+        # Filter out nulls
         return {k: v for k, v in data.items() if v is not None}
         
     except Exception as e:

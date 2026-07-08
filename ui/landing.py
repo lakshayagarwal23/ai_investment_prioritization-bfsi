@@ -8,169 +8,57 @@ Renders as Phase 0 — concise C-suite overview before intake begins.
 import streamlit as st
 from llm.search_client import extract_company_data
 
-
 # ─────────────────────────────────────────────────────────────────────────────
-# HTML SECTIONS
+# HTML SECTIONS (PwC Horizon Redesign)
 # ─────────────────────────────────────────────────────────────────────────────
 
 _HERO_HTML = """
-<div class="lp-hero">
-  <div class="lp-hero-left">
-    <div class="lp-badge">BFSI / ASSET MANAGEMENT &nbsp;&middot;&nbsp; STRATEGIC INTELLIGENCE v2.0</div>
-    <h1 class="lp-h1">
-      AI Investment<br>
-      <span class="lp-h1-accent">Prioritisation</span>
+<div class="hz-landing">
+    <div style="font-family: var(--font-body); font-size: 11px; font-weight: 600; color: var(--g500); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: var(--sp-4);">
+        BFSI / Asset Management &nbsp;·&nbsp; Strategic Intelligence
+    </div>
+    <h1 class="hz-landing-h1">
+        AI investment prioritisation &mdash;<br>
+        <span style="color: var(--pwc-orange);">BFSI diagnostic</span>
     </h1>
-    <p class="lp-tagline">
-      Bottom-up capital allocation for Asset Management transformation programmes.
-      Peer-benchmarked. Risk-adjusted. Board-ready.
+    <p class="hz-landing-desc">
+        Bottom-up capital allocation for Asset Management transformation programmes.<br>
+        Peer-benchmarked. Risk-adjusted. Board-ready.
     </p>
-    <div class="lp-tag-row">
-      <span class="lp-tag">Bottom-Up Financial Modeling</span>
-      <span class="lp-tag">10+ Peer Benchmarks</span>
-      <span class="lp-tag">Risk-Adjusted Projections</span>
-      <span class="lp-tag">Deterministic AI Valuation</span>
+
+    <div class="hz-feat-grid">
+        <div class="hz-feat-col">
+            <div class="hz-feat-col-title">Peer Benchmarks</div>
+            <div class="hz-feat-col-desc">Capital allocation triangulated against 10+ public BFSI leaders including BlackRock, Vanguard, and Fidelity.</div>
+        </div>
+        <div class="hz-feat-col">
+            <div class="hz-feat-col-title">Bottom-Up Financials</div>
+            <div class="hz-feat-col-desc">Line-item deployment across 30+ AI use cases with traceable ROI assumptions.</div>
+        </div>
+        <div class="hz-feat-col">
+            <div class="hz-feat-col-title">Risk-Adjusted</div>
+            <div class="hz-feat-col-desc">Data fragmentation and organisational resistance automatically widen confidence intervals.</div>
+        </div>
     </div>
-  </div>
-  <div class="lp-hero-right">
-    <div class="lp-dashboard-mock">
-      <div class="lp-mock-topbar">
-        <div class="lp-mock-dot"></div>
-        <div class="lp-mock-topbar-title">AI Investment Prioritisation</div>
-        <div class="lp-mock-topbar-badge">GENERATED</div>
-      </div>
-      <div class="lp-mock-kpi-row">
-        <div class="lp-mock-kpi lp-kpi-orange">
-          <div class="lp-mock-kpi-num">Value</div>
-          <div class="lp-mock-kpi-lbl">Strategic Bets</div>
-        </div>
-        <div class="lp-mock-kpi lp-kpi-blue">
-          <div class="lp-mock-kpi-num">21mo</div>
-          <div class="lp-mock-kpi-lbl">Payback</div>
-        </div>
-        <div class="lp-mock-kpi lp-kpi-green">
-          <div class="lp-mock-kpi-num">&plusmn;20%</div>
-          <div class="lp-mock-kpi-lbl">Confidence</div>
-        </div>
-      </div>
-      <div class="lp-mock-chart-area">
-        <div class="lp-mock-chart-bar-wrap"><div class="lp-mock-chart-bar" style="height:62%"></div><div class="lp-mock-chart-bar-lbl">AUM</div></div>
-        <div class="lp-mock-chart-bar-wrap"><div class="lp-mock-chart-bar lp-bar-orange" style="height:40%"></div><div class="lp-mock-chart-bar-lbl">Found.</div></div>
-        <div class="lp-mock-chart-bar-wrap"><div class="lp-mock-chart-bar" style="height:55%"></div><div class="lp-mock-chart-bar-lbl">Risk</div></div>
-      </div>
-      <div class="lp-mock-ledger">
-        <div class="lp-mock-ledger-hdr">
-          <span>Use Case</span><span>Allocation</span>
-        </div>
-        <div class="lp-mock-ledger-row">
-          <span class="lp-mock-ledger-dot lp-dot-orange"></span>
-          <span class="lp-mock-ledger-name">Trade Recon & Ops</span>
-          <span class="lp-mock-ledger-val">$18.5M</span>
-        </div>
-        <div class="lp-mock-ledger-row lp-mock-ledger-alt">
-          <span class="lp-mock-ledger-dot lp-dot-blue"></span>
-          <span class="lp-mock-ledger-name">Data Platform</span>
-          <span class="lp-mock-ledger-val">$30.0M</span>
-        </div>
-        <div class="lp-mock-ledger-row">
-          <span class="lp-mock-ledger-dot lp-dot-green"></span>
-          <span class="lp-mock-ledger-name">Research Amplification</span>
-          <span class="lp-mock-ledger-val">$14.2M</span>
-        </div>
-      </div>
+    
+    <div style="margin-top: var(--sp-12); border-top: 1px solid var(--g200); padding-top: var(--sp-4);">
+        <span style="font-family: var(--font-head); font-size: 24px; color: var(--pwc-orange); font-weight: bold;">pwc</span>
     </div>
-  </div>
 </div>
 """
-
-_OVERVIEW_HTML = """
-<div class="lp-section lp-white">
-  <div class="lp-sect-header">
-    <div class="lp-sect-eyebrow">PLATFORM CAPABILITIES</div>
-    <div class="lp-sect-h2">From intake to board-ready thesis. One session.</div>
-  </div>
-  <div class="lp-grid-3">
-    <div class="lp-feat-card" style="border: 1px solid var(--border); padding: 24px;">
-      <div class="lp-feat-title" style="margin-top: 0; color: var(--pwc-orange);">01 &nbsp;&middot;&nbsp; Peer Benchmarks</div>
-      <div class="lp-feat-desc">
-        Capital allocation triangulated against 10+ public BFSI leaders including BlackRock, Vanguard, and Fidelity.
-      </div>
-    </div>
-    <div class="lp-feat-card" style="border: 1px solid var(--border); padding: 24px;">
-      <div class="lp-feat-title" style="margin-top: 0; color: var(--blue);">02 &nbsp;&middot;&nbsp; Bottom-Up Financials</div>
-      <div class="lp-feat-desc">
-        Line-item deployment across 30+ AI use cases with traceable ROI assumptions.
-      </div>
-    </div>
-    <div class="lp-feat-card" style="border: 1px solid var(--border); padding: 24px;">
-      <div class="lp-feat-title" style="margin-top: 0; color: var(--pwc-red);">03 &nbsp;&middot;&nbsp; Risk-Adjusted</div>
-      <div class="lp-feat-desc">
-        Data fragmentation and organisational resistance automatically widen confidence intervals.
-      </div>
-    </div>
-  </div>
-</div>
-"""
-
-_PEER_STRIP_HTML = """
-<div class="lp-peer-strip">
-  <div class="lp-peer-strip-label">PEER INTELLIGENCE CORPUS</div>
-  <div class="lp-peer-strip-logos">
-    <span class="lp-peer-name">BlackRock</span>
-    <span class="lp-peer-sep">&middot;</span>
-    <span class="lp-peer-name">Vanguard</span>
-    <span class="lp-peer-sep">&middot;</span>
-    <span class="lp-peer-name">Fidelity</span>
-    <span class="lp-peer-sep">&middot;</span>
-    <span class="lp-peer-name">State Street</span>
-    <span class="lp-peer-sep">&middot;</span>
-    <span class="lp-peer-name">J.P. Morgan AM</span>
-    <span class="lp-peer-sep">&middot;</span>
-    <span class="lp-peer-name">Goldman Sachs AM</span>
-    <span class="lp-peer-sep">&middot;</span>
-    <span class="lp-peer-name">Morgan Stanley</span>
-    <span class="lp-peer-sep">&middot;</span>
-    <span class="lp-peer-name">BNY Mellon</span>
-    <span class="lp-peer-sep">&middot;</span>
-    <span class="lp-peer-name">Amundi</span>
-    <span class="lp-peer-sep">&middot;</span>
-    <span class="lp-peer-name">UBS AM</span>
-  </div>
-</div>
-"""
-
-_DISCLAIMER_HTML = """
-<div class="lp-footer-disc">
-  <strong>Disclaimer:</strong> Output is intended for strategic planning and executive discussion.
-  Financial projections are derived from publicly available BFSI industry benchmark data and
-  should be validated against internal actuals before board submission.
-</div>
-"""
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# RENDER FUNCTION
-# ─────────────────────────────────────────────────────────────────────────────
 
 def render_landing_page() -> None:
-    """
-    Render the complete landing page. Phase 0.
-    """
-    # Hero section
+    """Render the landing hero and handle the intake initiation."""
     st.html(_HERO_HTML)
+    
+    col1, col2, _ = st.columns([1, 1, 2])
+    with col1:
+        st.write("") 
+        st.write("") 
+        if st.button("Begin Diagnostic", type="primary", use_container_width=True):
+            st.session_state.app_phase = 1
+            st.rerun()
 
-    col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        btn_cols = st.columns([1, 2, 1])
-        with btn_cols[1]:
-            if st.button("Begin Assessment", use_container_width=True, type="primary"):
-                st.session_state.app_phase = 1
-                st.rerun()
-
-    # Informational sections
-    st.html(_OVERVIEW_HTML)
-    st.html(_PEER_STRIP_HTML)
-
-    st.html('<div style="height: 32px;"></div>')
-    st.html(_DISCLAIMER_HTML)
+        # P0: Removed the fake metrics, keep it simple.
+        pass

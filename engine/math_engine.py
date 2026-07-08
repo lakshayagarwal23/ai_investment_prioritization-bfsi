@@ -25,10 +25,52 @@ def risk_adjusted_roi(total_impl_cost: float, anv: float, execution_risk: float)
     raw_roi = (anv / total_impl_cost) * 100.0
     return raw_roi * (1.0 - execution_risk)
 
-def payback_months(total_impl_cost: float, anv: float) -> float:
-    if anv <= 0:
+def payback_months(total_impl_cost: float, steady_anv: float) -> float:
+    if steady_anv <= 0:
         return 999.0
-    return (total_impl_cost / (anv / 12.0))
+    
+    # Ramp curve: Year 1 = 25%, Year 2 = 60%, Year 3+ = 100%
+    y1_cf = steady_anv * 0.25
+    if y1_cf >= total_impl_cost:
+        return (total_impl_cost / y1_cf) * 12.0
+        
+    y2_cf = steady_anv * 0.60
+    if y1_cf + y2_cf >= total_impl_cost:
+        rem = total_impl_cost - y1_cf
+        return 12.0 + (rem / y2_cf) * 12.0
+        
+    y3_cf = steady_anv * 1.0
+    if y1_cf + y2_cf + y3_cf >= total_impl_cost:
+        rem = total_impl_cost - y1_cf - y2_cf
+        return 24.0 + (rem / y3_cf) * 12.0
+        
+    rem = total_impl_cost - y1_cf - y2_cf - y3_cf
+    return 36.0 + (rem / y3_cf) * 12.0
+
+def compute_dynamic_feasibility(base_feasibility: int, answers: dict) -> int:
+    score = base_feasibility
+    # Penalty for Legacy Monolith ERP
+    erp = answers.get("S1_ERP", "")
+    if "monolith" in str(erp).lower():
+        score -= 15
+    elif "cloud-native" in str(erp).lower():
+        score += 10
+        
+    # Penalty for Data Silos
+    silos = float(answers.get("S1_SILO", 5.0))
+    if silos >= 7:
+        score -= 10
+    elif silos <= 3:
+        score += 5
+        
+    # Reward for Governance
+    gov = float(answers.get("S5_GOVERNANCE_SCORE", 50))
+    if gov > 75:
+        score += 10
+    elif gov < 40:
+        score -= 15
+        
+    return max(0, min(100, int(score)))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -36,7 +78,8 @@ def payback_months(total_impl_cost: float, anv: float) -> float:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def lever_1_trade_recon(a: dict, scenario: str = "base") -> float:
-    fte          = a.get("S3_FTE_RECON", 8.0)
+    # Benefit Attribution: Claims 20% of the total ops FTE pool
+    fte          = a.get("S3_TOTAL_OPS_FTE", 50.0) * 0.20
     loaded_cost  = 150_000
     time_pct     = 0.70
     breaks       = a.get("S3_ANNUAL_BREAKS", 50_000)
@@ -56,9 +99,9 @@ def lever_1_trade_recon(a: dict, scenario: str = "base") -> float:
     return automation_savings + error_avoidance - run_cost
 
 def lever_3_research(a: dict, scenario: str = "base") -> float:
-    analysts     = a.get("S2_ANALYST_COUNT", 40.0)
-    parse_hrs    = a.get("S2_PARSING_HOURS", 450.0)
-    names        = a.get("S2_NAMES_COVERED", 40.0)
+    analysts     = 40.0
+    parse_hrs    = 450.0
+    names        = 40.0
     loaded_cost  = 350_000
     automation   = 0.85
     multiplier   = 3.5
@@ -78,10 +121,11 @@ def lever_3_research(a: dict, scenario: str = "base") -> float:
     return coverage_val + efficiency_val - run_cost
 
 def lever_5_onboarding(a: dict, scenario: str = "base") -> float:
-    fte          = a.get("S4_ONBOARD_FTE", 6.0)
+    # Benefit Attribution: Claims 15% of the total ops FTE pool
+    fte          = a.get("S3_TOTAL_OPS_FTE", 50.0) * 0.15
     loaded_cost  = 140_000
     automation   = 0.90
-    days_current = a.get("S4_ONBOARD_DAYS", 45.0)
+    days_current = 45.0
     days_ai      = 10.0
     new_clients  = 50
     avg_aum      = 200e6  # $200M avg new client
@@ -111,7 +155,8 @@ def lever_10_corp_actions(a: dict, scenario: str = "base") -> float:
     return (processing_cost * automation) + (volume * err_rate * err_cost * err_red) - run_cost
 
 def lever_6_compliance(a: dict, scenario: str = "base") -> float:
-    fte         = a.get("S4_COMPLIANCE_FTE", 10.0)
+    # Benefit Attribution: Claims 25% of the total ops FTE pool
+    fte         = a.get("S3_TOTAL_OPS_FTE", 50.0) * 0.25
     loaded_cost = 180_000
     automation  = 0.65
     err_events  = 5
@@ -200,7 +245,8 @@ def lever_11_underwriting_automation(a: dict, scenario: str = "base") -> float:
 def lever_12_claims_processing(a: dict, scenario: str = "base") -> float:
     """AI-driven claims processing automation."""
     annual_claims = a.get("S3_ANNUAL_CLAIMS", 100_000)
-    processor_fte = a.get("S3_CLAIMS_PROCESSOR_FTE", 22.0)
+    # Benefit Attribution: Claims 40% of the total ops FTE pool
+    processor_fte = a.get("S3_TOTAL_OPS_FTE", 50.0) * 0.40
     loaded_cost_per_fte = 140_000
     current_stp = a.get("S3_STP", 65) / 100.0
     
@@ -257,12 +303,7 @@ def lever_14_rural_onboarding(a: dict, scenario: str = "base") -> float:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def compute_governance_readiness(a: dict) -> float:
-    ownership   = a.get("S5_DATA_OWNERSHIP", 55.0)
-    lineage     = a.get("S5_LINEAGE", 35.0)
-    dq_sla      = a.get("S5_DQ_SLA", 72.0)
-    reg_trace   = a.get("S5_REGULATORY_TRACE", 50.0)
-    chng_mgmt   = a.get("S5_CHANGE_MGMT", 45.0)
-    return (ownership + lineage + dq_sla + reg_trace + chng_mgmt) / 5.0
+    return float(a.get("S5_GOVERNANCE_SCORE", 50.0))
 
 def compute_execution_risk(a: dict) -> float:
     gov = compute_governance_readiness(a)
@@ -294,7 +335,7 @@ LEVER_COMPUTE = {
 # MAIN ENTRY POINT
 # ─────────────────────────────────────────────────────────────────────────────
 
-def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0, primary_goals: list[str] = None, llm_intel: dict | None = None) -> list[dict]:
+def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0, primary_goals: list[str] = None, llm_intel: dict | None = None, scenario: str = "base") -> list[dict]:
     """
     Score all BFSI levers, filtering by budget and ranking by goal alignment.
     """
@@ -305,7 +346,8 @@ def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0, primar
     scored = []
 
     # Evaluate all levers initially (we will assign budget approval later)
-    feasible_levers = BFSI_LEVERS
+    sector = answers.get("target_sector", "all")
+    feasible_levers = [l for l in BFSI_LEVERS if "all" in l.get("sectors", ["all"]) or sector in l.get("sectors", ["all"])]
     
     # 2. Assign Goal Weights
     goal_weights = {
@@ -314,6 +356,9 @@ def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0, primar
         "Regulatory Resilience (Risk)": 1.0,
         "Client Coverage Scaling": 1.0,
     }
+    
+    haircuts = {"conservative": 0.50, "base": 0.60, "aggressive": 0.75}
+    haircut = haircuts.get(scenario, 0.60)
 
     for lever in feasible_levers:
         lid = lever["id"]
@@ -322,20 +367,21 @@ def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0, primar
         # Explicit exception handling (no silent masking)
         if compute_fn:
             try:
-                anv = compute_fn(answers, scenario="base")
+                raw_anv = compute_fn(answers, scenario=scenario)
+                anv = raw_anv * haircut
             except ZeroDivisionError:
                 anv = 0.0
             except Exception:
                 anv = 0.0
         else:
-            anv = lever.get("anv_estimate", 0.0)
+            anv = lever.get("anv_estimate", 0.0) * haircut
 
         impl_cost = lever.get("impl_cost_estimate", 1_000_000)
         payback   = payback_months(impl_cost, anv)
         roi       = risk_adjusted_roi(impl_cost, anv, exec_risk)
 
         impact      = lever.get("base_impact", 50)
-        feasibility = lever.get("base_feasibility", 50)
+        feasibility = compute_dynamic_feasibility(lever.get("base_feasibility", 50), answers)
         
         # CORRECT SPEED SCORE: Linear interpolation (0 to 100 based on 36 month to 1 month payback)
         speed_score = max(0, min(100, int(100 * (36 - payback) / 35)))

@@ -1,22 +1,12 @@
 """
-ui/dashboard.py — Premium BFSI AI Investment Engine results dashboard.
+ui/dashboard.py — Premium BFSI AI Investment Engine results dashboard (PwC Horizon spec).
 """
 from __future__ import annotations
 import streamlit as st
 import plotly.graph_objects as go
-import plotly.express as px
-from engine.legacy_diagnostic import calculate_deprecation_score
+import html
+from engine.legacy_diagnostic import run_diagnostic, LegacyInputs
 from engine.competitive import compute_competitive_advantage_score
-
-# ── Colour helpers ────────────────────────────────────────────────────────
-
-def _quad_cls(q: str) -> str:
-    m = {"Strategic Bets": "bfsi-quad-strategic", "Quick Wins / Fill-ins": "bfsi-quad-quick",
-         "Park (Data-Blocked)": "bfsi-quad-park", "Evaluate": "bfsi-quad-evaluate"}
-    return m.get(q, "bfsi-quad-evaluate")
-
-def _priority_cls(p: str) -> str:
-    return {"P0": "bfsi-p0", "P1": "bfsi-p1", "P2": "bfsi-p2", "P3": "bfsi-p3"}.get(p, "bfsi-p3")
 
 # ── Main Entry Point ───────────────────────────────────────────────────────
 
@@ -25,10 +15,21 @@ def render_dashboard() -> None:
         st.warning("Please complete the intake form first.")
         return
 
+    scenario = st.radio("Execution Scenario", ["conservative", "base", "aggressive"], index=1, horizontal=True)
+    if scenario != st.session_state.get("current_scenario", "base"):
+        st.session_state.current_scenario = scenario
+        from engine.math_engine import build_investment_plan
+        st.session_state.thesis_plan = build_investment_plan(
+            st.session_state.discovery_answers, 
+            st.session_state.budget_usd_m, 
+            st.session_state.primary_goals,
+            scenario=scenario
+        )
+        st.rerun()
+
     plan = st.session_state.thesis_plan or []
     answers = st.session_state.discovery_answers or {}
     company = html.escape(st.session_state.company_name) if st.session_state.company_name else "The Firm"
-
     _render_kpi_header(plan, answers, company)
 
     tab1, tab2, tab3, tab4 = st.tabs([
@@ -46,46 +47,47 @@ def render_dashboard() -> None:
 # ── KPI Header Row ─────────────────────────────────────────────────────────
 
 def _render_kpi_header(plan, answers, company):
-    # Only aggregate levers that fit within the budget limit
     approved_plan = [p for p in plan if p.get("budget_approved", False)]
-    
     total_anv  = sum(p["anv"] for p in approved_plan) / 1e6
-    top_lever  = approved_plan[0]["name"] if approved_plan else (plan[0]["name"] if plan else "—")
-    payback    = approved_plan[0]["payback"] if approved_plan else 0
+    total_cost = sum(p["impl_cost"] for p in approved_plan) / 1e6
+    
+    from engine.math_engine import compute_execution_risk, payback_months
+    exec_risk = compute_execution_risk(answers)
+    risk_adj_anv = total_anv * (1.0 - exec_risk)
+    
+    payback = payback_months(total_cost * 1e6, total_anv * 1e6)
     quick_wins = sum(1 for p in approved_plan if p["quadrant"] == "Quick Wins / Fill-ins")
     bets       = sum(1 for p in approved_plan if p["quadrant"] == "Strategic Bets")
     aum        = answers.get("S1_AUM", 50)
 
     st.html(f"""
-    <div style="margin-bottom:8px;">
-        <div style="font-size:11px;font-weight:700;letter-spacing:0.10em;text-transform:uppercase;color:var(--ink-500);margin-bottom:4px;">DIAGNOSTIC COMPLETE</div>
-        <div style="font-family:'Outfit',sans-serif;font-size:24px;font-weight:700;color:var(--ink-900);line-height:1.2;">
-            AI Investment Roadmap: <span style="color:var(--brand);">{company}</span>
+    <div style="margin-bottom: var(--sp-6);">
+        <div style="font-family: var(--font-head); font-size: 26px; color: var(--black); line-height: 1.2;">
+            AI Investment Roadmap: <span style="color: var(--pwc-orange);">{company}</span>
         </div>
-        <div style="font-size:12.5px;color:var(--ink-600);margin-top:4px;">
-            ${aum}B AUM · 14 AI Levers Scored
+        <div style="font-size: 14px; color: var(--g500); margin-top: var(--sp-1);">
+            ${aum}B AUM · {len(plan)} AI Levers Scored
         </div>
     </div>
-    <div class="bfsi-kpi-grid">
-        <div class="bfsi-kpi-tile bfsi-kpi-orange">
-            <div class="bfsi-kpi-num">${total_anv:.0f}M</div>
-            <div class="bfsi-kpi-label">Total Annual Net Value</div>
-            <div class="bfsi-kpi-delta bfsi-delta-pos">↑ 25–35% cost reduction potential</div>
+    <div class="hz-kpi-row">
+        <div class="hz-kpi-tile hz-kpi-hero">
+            <div class="hz-kpi-lbl">Risk-Adjusted Annual Net Value</div>
+            <div class="hz-kpi-num">${risk_adj_anv:.1f}M</div>
+            <div style="font-size: 11px; color: var(--pwc-orange); border-top: 1px solid var(--pwc-orange); margin-top: 8px; padding-top: 4px;">
+                Raw ANV: ${total_anv:.1f}M
+            </div>
         </div>
-        <div class="bfsi-kpi-tile bfsi-kpi-green">
-            <div class="bfsi-kpi-num">{bets}</div>
-            <div class="bfsi-kpi-label">Strategic Bets</div>
-            <div class="bfsi-kpi-delta bfsi-delta-pos">High impact · Fast execution</div>
+        <div class="hz-kpi-tile">
+            <div class="hz-kpi-lbl">Strategic Bets</div>
+            <div class="hz-kpi-num">{bets}</div>
         </div>
-        <div class="bfsi-kpi-tile bfsi-kpi-amber">
-            <div class="bfsi-kpi-num">{quick_wins}</div>
-            <div class="bfsi-kpi-label">Quick Wins</div>
-            <div class="bfsi-kpi-delta bfsi-delta-warn">Deploy first · Prove ROI</div>
+        <div class="hz-kpi-tile">
+            <div class="hz-kpi-lbl">Quick Wins</div>
+            <div class="hz-kpi-num">{quick_wins}</div>
         </div>
-        <div class="bfsi-kpi-tile bfsi-kpi-red">
-            <div class="bfsi-kpi-num">{payback:.0f}mo</div>
-            <div class="bfsi-kpi-label">Fastest Payback</div>
-            <div class="bfsi-kpi-delta bfsi-delta-pos">↑ {top_lever[:28]}…</div>
+        <div class="hz-kpi-tile">
+            <div class="hz-kpi-lbl">Portfolio Payback</div>
+            <div class="hz-kpi-num">{payback:.0f}mo</div>
         </div>
     </div>
     """)
@@ -94,93 +96,120 @@ def _render_kpi_header(plan, answers, company):
 # ── Tab 1: Prioritization Matrix ──────────────────────────────────────────
 
 def _tab_matrix(plan: list[dict]) -> None:
-    st.html('<div class="bfsi-report-h2">AI Use Case Prioritization Matrix — Impact × Feasibility</div>')
-    # Scatter 2x2
-    names   = [p["name"] for p in plan]
-    x_vals  = [p["feasibility"] for p in plan]
-    y_vals  = [p["impact"] for p in plan]
-    sizes   = [min(80, max(12, p["anv_m"] * 3)) for p in plan]
+    st.html('<div class="hz-report-h2">AI Use Case Prioritization Matrix</div>')
     
-    # Subtle Colors for Light Mode
-    colors  = ["#D04A02" if p["quadrant"] == "Strategic Bets"       # Brand Orange
-               else "#1B9C6B" if p["quadrant"] == "Quick Wins / Fill-ins" # Green
-               else "#E8A317" if p["quadrant"] == "Park (Data-Blocked)"   # Amber
-               else "#6B7480" for p in plan]                              # Cool Gray
+    # Thresholds match engine classification exactly
+    thresh_imp = 65
+    thresh_feas = 60
+
+    x_vals = []
+    y_vals = []
+    sizes = []
+    labels = []
+    funded = []
+
+    for i, p in enumerate(plan):
+        x_vals.append(p["feasibility"])
+        y_vals.append(p["impact"])
+        # Scale area, not diameter
+        area = max(12, p["anv_m"] * 3)
+        sizes.append(area ** 0.5 * 3) # approx sqrt scaling
+        labels.append(p["name"].split("&")[0].strip())
+        funded.append(p.get("budget_approved", False))
 
     fig = go.Figure()
+
+    # Split into funded and unfunded to style them correctly
     for i, p in enumerate(plan):
-        # Visually de-emphasize unfunded levers
-        opacity = 0.9 if p.get("budget_approved", False) else 0.3
-        funded_text = "" if p.get("budget_approved", False) else " (Unfunded)"
+        name = labels[i]
         
+        if funded[i]:
+            marker = dict(size=sizes[i], color="#D04A02", line=dict(color="white", width=1))
+        else:
+            marker = dict(size=sizes[i], color="rgba(0,0,0,0)", line=dict(color="#D04A02", width=1.5))
+
+        # Only show labels for top 5 (which are usually first in the plan sorted by ANV/Priority)
+        mode = "markers+text" if i < 5 else "markers"
+        
+        hovertemplate = (
+            f"<b>{p['name']}</b>{' (Unfunded)' if not funded[i] else ''}<br>"
+            f"ANV: ${p['anv_m']:.1f}M/yr<br>"
+            f"Payback: {p['payback']:.0f} months<br>"
+            f"Cost: ${p.get('impl_cost', 0)/1e6:.1f}M<br>"
+            f"Priority: {p['priority']}<br>"
+            f"<extra>{p['quadrant']}</extra>"
+        )
+
         fig.add_trace(go.Scatter(
             x=[x_vals[i]], y=[y_vals[i]],
-            mode="markers+text",
-            text=[p["name"].split("&")[0].strip()[:22] + funded_text],
+            mode=mode,
+            text=[name],
             textposition="top center",
-            textfont=dict(size=10, color="#4A525C"),
-            marker=dict(size=sizes[i], color=colors[i], opacity=opacity,
-                        line=dict(color="white", width=2)),
-            name=p["quadrant"],
-            hovertemplate=(
-                f"<b>{p['name']}</b>{funded_text}<br>"
-                f"ANV: ${p['anv_m']:.1f}M/yr<br>"
-                f"Payback: {p['payback']:.0f} months<br>"
-                f"Cost: ${p.get('impl_cost', 0)/1e6:.1f}M<br>"
-                f"Priority: {p['priority']}<br>"
-                f"<extra>{p['quadrant']}</extra>"
-            ),
+            textfont=dict(size=11, color="#2D2D2D", family="Arial"),
+            marker=marker,
+            name=p["name"],
+            hovertemplate=hovertemplate,
             showlegend=False,
         ))
 
-    # Quadrant lines
-    fig.add_hline(y=50, line_dash="dash", line_color="#E3E7EC", line_width=1)
-    fig.add_vline(x=50, line_dash="dash", line_color="#E3E7EC", line_width=1)
+    # Add quadrant tint for Strategic Bets
+    fig.add_shape(type="rect", x0=thresh_feas, y0=thresh_imp, x1=105, y1=105,
+                  fillcolor="rgba(208,74,2,0.07)", line=dict(width=0), layer="below")
 
-    # Quadrant labels
+    # Lines
+    fig.add_hline(y=thresh_imp, line_dash="dash", line_color="#DEDEDE", line_width=1)
+    fig.add_vline(x=thresh_feas, line_dash="dash", line_color="#DEDEDE", line_width=1)
+
+    # Annotations
     annotations = [
-        dict(x=82, y=95, text="STRATEGIC BETS", font=dict(color="#D04A02", size=10, family="Inter"), showarrow=False),
-        dict(x=18, y=95, text="PARK", font=dict(color="#E8A317", size=10, family="Inter"), showarrow=False),
-        dict(x=82, y=5,  text="QUICK WINS / FILL-INS", font=dict(color="#1B9C6B", size=10, family="Inter"), showarrow=False),
-        dict(x=18, y=5,  text="EVALUATE", font=dict(color="#6B7480", size=10, family="Inter"), showarrow=False),
+        dict(x=thresh_feas + 2, y=103, text="Strategic bets", font=dict(color="#D04A02", size=11, family="Arial"), showarrow=False, xanchor="left"),
     ]
     fig.update_layout(
         annotations=annotations,
-        xaxis=dict(range=[0, 108],
-                   showgrid=False, zeroline=False, tickfont=dict(size=10, color="#6B7480"), title=dict(text="Feasibility Score →", font=dict(color="#6B7480"))),
-        yaxis=dict(range=[0, 108],
-                   showgrid=False, zeroline=False, tickfont=dict(size=10, color="#6B7480"), title=dict(text="Business Impact Score →", font=dict(color="#6B7480"))),
+        xaxis=dict(range=[0, 105], showgrid=False, zeroline=False, tickfont=dict(size=11, color="#7D7D7D"), title=dict(text="Feasibility Score →", font=dict(color="#7D7D7D"))),
+        yaxis=dict(range=[0, 105], showgrid=False, zeroline=False, tickfont=dict(size=11, color="#7D7D7D"), title=dict(text="Business Impact Score →", font=dict(color="#7D7D7D"))),
         height=500, margin=dict(l=40, r=40, t=20, b=40),
-        plot_bgcolor="#FAFBFC", paper_bgcolor="white",
-        font=dict(family="Inter"),
+        plot_bgcolor="white", paper_bgcolor="white",
+        font=dict(family="Arial"),
     )
     st.plotly_chart(fig, use_container_width=True)
 
     # Lever Table
-    st.html('<div class="bfsi-report-h2">Full Lever Scorecard</div>')
+    st.html('<div class="hz-report-h2">Full Lever Scorecard</div>')
     rows = ""
     for p in plan:
-        qcls = _quad_cls(p["quadrant"])
-        pcls = _priority_cls(p["priority"])
-        warn = f'<span style="background:rgba(239,68,68,0.15);color:#EF4444;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:8px;font-weight:700;">{p["warning"]}</span>' if p.get("warning") else ""
-        funded_tag = "" if p.get("budget_approved", False) else f'<span style="background:var(--ink-200);color:var(--ink-500);padding:2px 6px;border-radius:4px;font-size:10px;margin-left:8px;font-weight:700;">UNFUNDED</span>'
-        row_style = "opacity: 0.4;" if not p.get("budget_approved", False) else ""
+        funded = p.get("budget_approved", False)
+        tr_cls = "" if funded else "unfunded"
+        funded_tag = "" if funded else f'<span class="hz-chip median" style="margin-left:8px;">UNFUNDED</span>'
+        
+        # Negative ANV handling
+        if p["anv_m"] < 0:
+            payback_str = "n/a — negative ANV"
+            val_str = f"<span class='hz-status-breach'>${p['anv_m']:.1f}M</span>"
+            warn = f'<span class="hz-status-breach" style="font-size:11px; margin-left:8px;">△ value-destructive</span>'
+        else:
+            payback_str = f"{p['payback']:.0f} mo"
+            val_str = f"${p['anv_m']:.1f}M"
+            warn = ""
+            
         rows += f"""
-        <tr style="{row_style}">
+        <tr class="{tr_cls}">
             <td><strong>{p['name']}</strong>{warn}{funded_tag}</td>
-            <td><span class="bfsi-priority-chip {pcls}">{p['priority']}</span></td>
-            <td class="{qcls}">{p['quadrant']}</td>
-            <td><strong>${p['anv_m']:.1f}M</strong></td>
-            <td>{p['payback']:.0f} mo</td>
-            <td>{p['impact']}/100</td>
-            <td>{p['feasibility']}/100</td>
+            <td>{p['priority']}</td>
+            <td>{p['quadrant']}</td>
+            <td class="num">{val_str}</td>
+            <td class="num">{payback_str}</td>
+            <td class="num">{p['impact']}/100</td>
+            <td class="num">{p['feasibility']}/100</td>
         </tr>"""
+        
     st.html(f"""
-    <table class="bfsi-lever-table">
+    <table class="hz-table-wrap">
         <thead>
             <tr>
                 <th>AI Use Case</th><th>Priority</th><th>Quadrant</th>
-                <th>ANV / Year</th><th>Payback</th><th>Impact</th><th>Feasibility</th>
+                <th style="text-align:right;">ANV / Year</th><th style="text-align:right;">Payback</th>
+                <th style="text-align:right;">Impact</th><th style="text-align:right;">Feasibility</th>
             </tr>
         </thead>
         <tbody>{rows}</tbody>
@@ -191,13 +220,11 @@ def _tab_matrix(plan: list[dict]) -> None:
 # ── Tab 2: Legacy Deprecation ──────────────────────────────────────────────
 
 def _tab_deprecation(answers: dict, plan: list[dict]) -> None:
-    st.html('<div class="bfsi-report-h2">Legacy System Deprecation Diagnostic</div>')
+    st.html('<div class="hz-report-h2">Legacy System Deprecation Diagnostic</div>')
 
-    # Platform-gated levers that depend on killing legacy
     PLATFORM_GATED_LEVERS = {"lever_2", "lever_8", "lever_11", "lever_13"}
     unlocked_anv_m = sum(p["anv"] for p in plan if p.get("id") in PLATFORM_GATED_LEVERS) / 1e6
 
-    # Instantiate inputs
     inputs = LegacyInputs(
         maintenance_cost_m=answers.get("S5_MAINTENANCE_COST", 6.5),
         biz_value_m=answers.get("S5_BIZ_VALUE", 20.0),
@@ -210,7 +237,7 @@ def _tab_deprecation(answers: dict, plan: list[dict]) -> None:
         reg_trace=answers.get("S5_REGULATORY_TRACE", 50.0),
         change_mgmt=answers.get("S5_CHANGE_MGMT", 45.0),
         unlocked_anv_m=unlocked_anv_m,
-        rebuild_cost_m=None  # Can be added to questionnaire later
+        rebuild_cost_m=None 
     )
 
     result = run_diagnostic(inputs)
@@ -218,63 +245,60 @@ def _tab_deprecation(answers: dict, plan: list[dict]) -> None:
 
     col1, col2 = st.columns([1, 1])
     with col1:
-        # Verdict Card
-        vcls = "bfsi-verdict-modern"
-        if result["verdict"] == "KILL & REBUILD": vcls = "bfsi-verdict-kill"
-        elif result["verdict"] == "REBUILD-BLOCKED": vcls = "bfsi-verdict-blocked"
-        elif result["verdict"] == "HOLD & OPTIMIZE": vcls = "bfsi-verdict-hold"
+        vcls = "modernize"
+        if result["verdict"] == "KILL & REBUILD": vcls = "kill"
+        elif result["verdict"] == "REBUILD-BLOCKED": vcls = "blocked"
+        elif result["verdict"] == "HOLD & OPTIMIZE": vcls = "hold"
         
         st.html(f"""
-        <div class="bfsi-verdict-card {vcls}">
-            <h3>VERDICT: {result['verdict']}</h3>
-            <p><strong>Architecture Pattern:</strong> {result['pattern']}</p>
-            <p>{result['rationale']}</p>
+        <div class="hz-verdict {vcls}">
+            <div class="hz-verdict-title">{result['verdict']}</div>
+            <div class="hz-verdict-body">
+                <strong>Architecture Pattern:</strong> {result['pattern']}<br><br>
+                {result['rationale']}
+            </div>
         </div>
         """)
 
     with col2:
-        # Diagnostic Table
+        def b_status(s):
+            if s > 70: return "<span class='hz-status-ok'>● Good</span>"
+            if s > 40: return "<span class='hz-status-watch'>● Watch</span>"
+            return "<span class='hz-status-breach'>● Breach</span>"
+            
         st.html(f"""
-        <table class="bfsi-diag-table">
-            <thead><tr><th>Pillar</th><th>Score</th></tr></thead>
+        <table class="hz-table-wrap">
+            <thead><tr><th>Diagnostic Pillar</th><th style="text-align:right;">Score</th><th>Status</th></tr></thead>
             <tbody>
-                <tr><td>Tech Debt Score</td><td>{pillars['tech_debt_score']}/100</td></tr>
-                <tr><td>Fragmentation Score</td><td>{pillars['fragmentation_score']}/100</td></tr>
-                <tr><td>Governance Readiness</td><td>{pillars['governance_readiness']}/100</td></tr>
-                <tr><td><strong>Overall Deprecation Score</strong></td><td><strong>{result['deprecation_score']}/100</strong></td></tr>
+                <tr><td>Tech Debt Score</td><td class="num">{pillars['tech_debt_score']}/100</td><td>{b_status(pillars['tech_debt_score'])}</td></tr>
+                <tr><td>Fragmentation Score</td><td class="num">{pillars['fragmentation_score']}/100</td><td>{b_status(pillars['fragmentation_score'])}</td></tr>
+                <tr><td>Governance Readiness</td><td class="num">{pillars['governance_readiness']}/100</td><td>{b_status(pillars['governance_readiness'])}</td></tr>
+                <tr><td><strong>Overall Deprecation Score</strong></td><td class="num"><strong>{result['deprecation_score']}/100</strong></td><td></td></tr>
             </tbody>
         </table>
         """)
 
-    # Self Funding Horizon
     if result.get("self_funding"):
         sf = result["self_funding"]
-        st.html('<div class="bfsi-report-h2" style="margin-top: 2rem;">Self-Funding Horizon</div>')
+        st.html('<div class="hz-report-h2" style="margin-top: 2rem;">Self-Funding Horizon</div>')
         payback_str = f"{sf['payback_months']} months" if sf['payback_months'] else "Does not pay back"
         funding_gap_str = f"${sf['first_year_funding_gap_m']}M"
         if sf['first_year_funding_gap_m'] <= 0:
-            funding_gap_str = "<span style='color:green;'>Fully Funded</span>"
+            funding_gap_str = "Fully Funded"
         
         st.html(f"""
-        <table class="bfsi-diag-table">
-            <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+        <table class="hz-table-wrap">
+            <thead><tr><th>Metric</th><th style="text-align:right;">Value</th></tr></thead>
             <tbody>
-                <tr><td>Legacy Annual Savings (Retained)</td><td>${sf['legacy_annual_savings_m']}M</td></tr>
-                <tr><td>Unlocked AI Value (Platform-Gated)</td><td>${sf['unlocked_anv_m']}M</td></tr>
-                <tr><td><strong>Total Annual Value</strong></td><td><strong>${sf['total_annual_value_m']}M</strong></td></tr>
-                <tr><td>Rebuild Capex {"(Estimated)" if sf['rebuild_cost_estimated'] else ""}</td><td>${sf['rebuild_cost_m']}M</td></tr>
-                <tr><td>First Year Funding Gap</td><td>{funding_gap_str}</td></tr>
-                <tr><td><strong>Payback Period</strong></td><td><strong>{payback_str}</strong></td></tr>
+                <tr><td>Legacy Annual Savings (Retained)</td><td class="num">${sf['legacy_annual_savings_m']}M</td></tr>
+                <tr><td>Unlocked AI Value (Platform-Gated)</td><td class="num">${sf['unlocked_anv_m']}M</td></tr>
+                <tr><td><strong>Total Annual Value</strong></td><td class="num"><strong>${sf['total_annual_value_m']}M</strong></td></tr>
+                <tr><td>Rebuild Capex {"(Estimated)" if sf['rebuild_cost_estimated'] else ""}</td><td class="num">${sf['rebuild_cost_m']}M</td></tr>
+                <tr><td>First Year Funding Gap</td><td class="num">{funding_gap_str}</td></tr>
+                <tr><td><strong>Payback Period</strong></td><td class="num"><strong>{payback_str}</strong></td></tr>
             </tbody>
         </table>
         """)
-
-
-def _governance(a: dict) -> float:
-    return (a.get("S5_DATA_OWNERSHIP", 55) + a.get("S5_LINEAGE", 35) +
-            a.get("S5_DQ_SLA", 72) + a.get("S5_REGULATORY_TRACE", 50) +
-            a.get("S5_CHANGE_MGMT", 45)) / 5.0
-
 
 # ── Tab 3: Strategic Memo ──────────────────────────────────────────────────
 
@@ -283,50 +307,55 @@ def _tab_memo() -> None:
     if not summary:
         st.info("Complete the intake form to generate the strategic memo.")
         return
-    st.html(summary)
+    st.html(f"""
+    <div style="max-width: 800px;">
+        <div style="font-family: var(--font-head); font-size: 26px; color: var(--black); margin: var(--sp-6) 0;">Executive Summary</div>
+        {summary}
+        <div style="margin-top: var(--sp-6); font-size: 11px; color: var(--g500); border-top: 1px solid var(--g200); padding-top: var(--sp-2);">
+            Generated by Gemini. Review for accuracy.
+        </div>
+    </div>
+    """)
 
 # ── Tab 4: Risk & Competitiveness ──────────────────────────────────────────
 
 def _tab_risk_competitive(plan: list[dict], answers: dict) -> None:
-    st.html('<div class="bfsi-report-h2">Competitive Positioning (vs. LIC, HDFC Life, ICICI Pru)</div>')
+    st.html('<div class="hz-report-h2">Competitive Positioning (vs. LIC, HDFC Life, ICICI Pru)</div>')
     
     comp_score = compute_competitive_advantage_score(plan, answers)
     c_score = comp_score["overall_score"]
     
     col1, col2 = st.columns([1, 2])
     with col1:
-        fig = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=c_score,
-            number={"suffix": "/100", "font": {"size": 32, "color": "#11161C"}},
-            title={"text": "Defensibility Index", "font": {"size": 13, "color": "#6b7280"}},
-            gauge={
-                "axis": {"range": [0, 100], "tickfont": {"size": 10}},
-                "bar": {"color": "#4F46E5", "thickness": 0.25},
-                "steps": [
-                    {"range": [0,  40], "color": "#fee2e2"},
-                    {"range": [40, 70], "color": "#fef3c7"},
-                    {"range": [70, 100], "color": "#d1fae5"},
-                ],
-                "threshold": {"line": {"color": "#D04A02", "width": 3}, "thickness": 0.75, "value": c_score},
-            }
-        ))
-        fig.update_layout(height=260, margin=dict(l=20, r=20, t=30, b=10), paper_bgcolor="white")
-        st.plotly_chart(fig, use_container_width=True)
+        st.html(f"""
+        <div class="hz-bullet-wrap" style="margin-top: var(--sp-4);">
+            <div class="hz-bullet-lbl-row">
+                <span class="hz-bullet-lbl">Defensibility Index</span>
+                <span class="hz-bullet-val">{c_score}/100</span>
+            </div>
+            <div class="hz-bullet-track">
+                <div class="hz-bullet-thresh" style="left: 40%;"></div>
+                <div class="hz-bullet-thresh" style="left: 70%;"></div>
+                <div class="hz-bullet-fill" style="width: {c_score}%;"></div>
+            </div>
+        </div>
+        """)
         
     with col2:
         if c_score >= 70:
             st.html("""
-            <div class="bfsi-callout" style="background:#f0fdf8; border-color:#1B9C6B;">
-                <strong>Market Leading Advantage:</strong> This plan leverages highly defensible MMIL assets (e.g. Rural Distribution or MAUDE). 
-                Competitors will take 18-24 months to reach parity with these specific levers.
+            <div class="hz-callout win">
+                <div class="hz-callout-title">Market Leading Advantage</div>
+                <div class="hz-callout-desc">This plan leverages highly defensible MMIL assets (e.g. Rural Distribution or MAUDE). 
+                Competitors will take 18-24 months to reach parity with these specific levers.</div>
             </div>
             """)
         else:
             st.html("""
-            <div class="bfsi-callout" style="background:#fffbeb; border-color:#E8A317;">
-                <strong>Catch-Up Strategy:</strong> The current plan focuses on generic IT modernization. While necessary, 
-                it does not provide a distinctive competitive moat against tier-1 incumbents like HDFC Life.
+            <div class="hz-callout park">
+                <div class="hz-callout-title">Catch-Up Strategy</div>
+                <div class="hz-callout-desc">The current plan focuses on generic IT modernization. While necessary, 
+                it does not provide a distinctive competitive moat against tier-1 incumbents like HDFC Life.</div>
             </div>
             """)
             
@@ -335,10 +364,10 @@ def _tab_risk_competitive(plan: list[dict], answers: dict) -> None:
             adv_html += f"<li><strong>{adv.name}:</strong> {adv.mmil_advantage} (<em>Parity: {adv.time_to_parity}</em>)</li>"
         
         if adv_html:
-            st.html(f"<ul style='font-size:13px; color:#374151;'>{adv_html}</ul>")
+            st.html(f"<ul style='font-size:13px; color:var(--g700);'>{adv_html}</ul>")
 
 
-    st.html('<div class="bfsi-report-h2">Regulatory Compliance Constraints (IRDAI, RBI, SEBI)</div>')
+    st.html('<div class="hz-report-h2" style="margin-top: 32px;">Regulatory Compliance Constraints</div>')
     
     reg_rows = ""
     for p in plan:
@@ -346,8 +375,7 @@ def _tab_risk_competitive(plan: list[dict], answers: dict) -> None:
         if not rs: continue
         
         r_level = rs.get("risk_level", "green")
-        badge_cls = "bfsi-diag-ok" if r_level == "green" else ("bfsi-diag-warn" if r_level == "yellow" else "bfsi-diag-bad")
-        status_text = "Compliant" if r_level == "green" else ("Requires Mitigation" if r_level == "yellow" else "High Risk")
+        status_text = "<span class='hz-status-ok'>● Compliant</span>" if r_level == "green" else ("<span class='hz-status-watch'>● Requires Mitigation</span>" if r_level == "yellow" else "<span class='hz-status-breach'>● High Risk</span>")
         
         constraints_html = "<br>".join([f"• {c.name} ({c.authority})" for c in rs.get("constraints", [])])
         if not constraints_html: constraints_html = "Standard IT hygiene"
@@ -358,14 +386,14 @@ def _tab_risk_competitive(plan: list[dict], answers: dict) -> None:
         reg_rows += f"""
         <tr>
             <td><strong>{p['name']}</strong></td>
-            <td><span class="{badge_cls}" style="padding:4px 8px;border-radius:4px;">{status_text}</span></td>
-            <td style="font-size:12px;color:#4b5563;">{constraints_html}</td>
-            <td style="font-size:12px;color:#4b5563;">{mitigations}</td>
+            <td>{status_text}</td>
+            <td>{constraints_html}</td>
+            <td>{mitigations}</td>
         </tr>
         """
         
     st.html(f"""
-    <table class="bfsi-lever-table">
+    <table class="hz-table-wrap">
         <thead>
             <tr>
                 <th>Investment Lever</th>

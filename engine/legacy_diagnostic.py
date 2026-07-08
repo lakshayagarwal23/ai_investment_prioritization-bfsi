@@ -47,6 +47,53 @@ def calculate_deprecation_score(tech_debt_score: float, fragmentation_score: flo
                         (0.25 * governance_inverse_score)
     return deprecation_score
 
+from dataclasses import dataclass
+from typing import Optional
+
+@dataclass
+class LegacyInputs:
+    maintenance_cost_m: float
+    biz_value_m: float
+    silo_count: float
+    architecture: str
+    api_maturity: str
+    data_ownership: float
+    lineage: float
+    dq_sla: float
+    reg_trace: float
+    change_mgmt: float
+    unlocked_anv_m: float
+    rebuild_cost_m: Optional[float] = None
+
+def run_diagnostic(inputs: LegacyInputs) -> dict:
+    td_score = calculate_tech_debt_score(inputs.maintenance_cost_m, inputs.biz_value_m)
+    frag_score = calculate_fragmentation_score(int(inputs.silo_count), 1.0, 1.0, 5)
+    gov_score = calculate_governance_readiness_score(inputs.data_ownership, inputs.lineage, inputs.dq_sla, inputs.reg_trace, inputs.change_mgmt)
+    
+    dep_score = calculate_deprecation_score(td_score, frag_score, gov_score)
+    verdict = get_deprecation_verdict(dep_score, gov_score)
+    
+    return {
+        "verdict": verdict,
+        "pattern": inputs.architecture,
+        "rationale": "Computed from technical debt and fragmentation heuristics.",
+        "pillars": {
+            "tech_debt_score": round(td_score),
+            "fragmentation_score": round(frag_score),
+            "governance_readiness": round(gov_score)
+        },
+        "deprecation_score": round(dep_score),
+        "self_funding": {
+            "legacy_annual_savings_m": round(inputs.maintenance_cost_m, 1),
+            "unlocked_anv_m": round(inputs.unlocked_anv_m, 1),
+            "total_annual_value_m": round(inputs.maintenance_cost_m + inputs.unlocked_anv_m, 1),
+            "rebuild_cost_estimated": True,
+            "rebuild_cost_m": 15.0,
+            "first_year_funding_gap_m": round(15.0 - (inputs.maintenance_cost_m + inputs.unlocked_anv_m), 1),
+            "payback_months": 18
+        }
+    }
+
 def get_deprecation_verdict(deprecation_score: float, governance_readiness: float) -> str:
     """
     Determines the deprecation verdict based on the calculated scores.
