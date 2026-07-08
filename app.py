@@ -9,6 +9,10 @@ Phase 3  Full AI investment prioritisation dashboard (full-width)
 Run with: .venv/bin/streamlit run app.py --server.port 8502
 """
 
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
 import streamlit as st
 
 # Must be the first Streamlit call
