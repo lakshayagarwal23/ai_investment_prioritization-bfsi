@@ -382,7 +382,7 @@ def compute_dynamic_impact(lever: dict, answers: dict, primary_goals: list[str])
 # MAIN ENTRY POINT
 # ─────────────────────────────────────────────────────────────────────────────
 
-def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0, primary_goals: list[str] = None, llm_intel: dict | None = None, scenario: str = "base") -> list[dict]:
+def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0, primary_goals: list[str] = None, llm_intel: dict | None = None, scenario: str = "base", foundation_decision: bool = False) -> list[dict]:
     """
     Score all BFSI levers, filtering by budget and ranking by goal alignment.
     """
@@ -406,6 +406,8 @@ def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0, primar
     
     haircuts = {"conservative": 0.50, "base": 0.60, "aggressive": 0.75}
     haircut = haircuts.get(scenario, 0.60)
+    
+    PLATFORM_GATED_LEVERS = {"lever_2", "lever_7", "lever_8", "lever_11", "lever_13"}
 
     for lever in feasible_levers:
         lid = lever["id"]
@@ -443,6 +445,10 @@ def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0, primar
         else:
             quadrant = "De-prioritize"
             
+        # Foundation override
+        if foundation_decision and lid in PLATFORM_GATED_LEVERS:
+            quadrant = "Quick Wins / Fill-ins"
+            
         # Goal Alignment
         goal_alignment = sum(
             goal_weights.get(goal, 0) for goal in primary_goals
@@ -471,6 +477,39 @@ def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0, primar
             "goal_weight": goal_alignment,
             "warning":     warning_flag,
             "reg_status":  reg_status,
+            "budget_approved": False
+        })
+        
+    if foundation_decision:
+        from engine.legacy_diagnostic import run_diagnostic, LegacyInputs
+        maintenance_cost = answers.get("S5_MAINTENANCE_COST", 6.5)
+        inputs = LegacyInputs(
+            maintenance_cost_m=maintenance_cost,
+            biz_value_m=answers.get("S5_BIZ_VALUE", 20.0),
+            silo_count=answers.get("S1_SILO", 5.0),
+            architecture=answers.get("S1_ARCH", "Hybrid — partial cloud"),
+            api_maturity=answers.get("S1_ERP", "On-prem with API layer"),
+            data_ownership=0, lineage=0, dq_sla=0, reg_trace=0, change_mgmt=0,
+            unlocked_anv_m=0, # Just calculating cost
+        )
+        res = run_diagnostic(inputs)
+        rebuild_capex = res["self_funding"]["rebuild_cost_m"] * 1e6
+        scored.append({
+            "name":        "Foundation Modernization",
+            "id":          "lever_0_foundation",
+            "impact":      90,
+            "speed":       20,
+            "feasibility": 80,
+            "anv":         0.0,
+            "anv_m":       0.0,
+            "impl_cost":   rebuild_capex,
+            "payback":     0.0,
+            "roi":         0.0,
+            "quadrant":    "Strategic Bets",
+            "priority":    "P0",
+            "goal_weight": 5,
+            "warning":     None,
+            "reg_status":  "✅ Checked",
             "budget_approved": False
         })
 

@@ -4,6 +4,7 @@ config/questions.py
 Trimmed BFSI intake questionnaire with dynamic routing.
 Implements the 48 -> 16 question trim, explicit AI provenance tags,
 and declarative visible_when gating for the PwC Horizon redesign.
+Updated: Jargon eliminated for C-suite readability.
 """
 
 SECTIONS = [
@@ -27,9 +28,9 @@ def get_questions_for_section(section_id: str, sector: str = "all") -> list[dict
 OTHER_OPTION = "Other (type below)"
 
 OBJECTIVE_INPUTS = [
-    "Margin Expansion (Cost)",
-    "Alpha Generation (Revenue)",
-    "Regulatory Resilience (Risk)",
+    "Margin Expansion (Cost Reduction)",
+    "Alpha Generation (Revenue Growth)",
+    "Regulatory Resilience (Risk Management)",
     "Client Coverage Scaling",
 ]
 
@@ -38,9 +39,9 @@ QUESTIONS = [
     {
         "id": "S1_AUM",
         "section": "S1",
-        "question": "Total AUM / Gross Written Premium ($B)",
+        "question": "What is the total size of assets or premiums your firm manages ($ Billions)?",
         "type": "numeric",
-        "help": "Used as the primary scaling denominator to compute the absolute dollar value of your revenue-generating AI levers.",
+        "help": "This helps us estimate the dollar value of revenue-focused AI investments.",
         "default": 50.0,
         "provenance": "AUTO",
         "sectors": ["all"]
@@ -48,9 +49,9 @@ QUESTIONS = [
     {
         "id": "S1_ARCH",
         "section": "S1",
-        "question": "Core data warehouse / platform architecture",
+        "question": "Where is your core business data primarily stored?",
         "type": "categorical",
-        "help": "Directly impacts the data fragmentation score. Siloed on-premise setups trigger architecture multipliers that penalize feasibility.",
+        "help": "This determines how easily AI can access your data. Older, on-premise systems require more effort to integrate.",
         "options": [
             "Siloed On-Premises (Batch)",
             "Hybrid — partial cloud",
@@ -63,9 +64,9 @@ QUESTIONS = [
     {
         "id": "S1_ERP",
         "section": "S1",
-        "question": "Core ERP / Policy Admin System status",
+        "question": "How modern is your core administrative system?",
         "type": "categorical",
-        "help": "Legacy monoliths trigger significant execution risk penalties, reducing the base feasibility score of complex operational integration levers.",
+        "help": "Older systems increase the difficulty and cost of rolling out complex operational AI.",
         "options": [
             "Legacy monolith (>10 years old)",
             "On-prem with API layer",
@@ -78,9 +79,9 @@ QUESTIONS = [
     {
         "id": "S1_KTLO",
         "section": "S1",
-        "question": "Maintenance-to-Innovation ratio (% of IT budget on Run)",
+        "question": "What percentage of your IT budget is spent just \"keeping the lights on\"?",
         "type": "percentage",
-        "help": "Gauges legacy budget lock-in. A higher Run/KTLO ratio signals reduced organizational agility for new AI deployment budgets.",
+        "help": "A high maintenance budget means less funding is available for deploying new AI capabilities.",
         "default": 72,
         "provenance": "MANUAL",
         "sectors": ["all"]
@@ -88,9 +89,9 @@ QUESTIONS = [
     {
         "id": "S1_SILO",
         "section": "S1",
-        "question": "Number of distinct systems holding core data entities",
+        "question": "How many separate systems hold your critical customer or product data?",
         "type": "numeric",
-        "help": "Drives the integration complexity component. Larger numbers of data silos directly degrade the feasibility of multi-agent workflows.",
+        "help": "More fragmented systems make it harder and more expensive to connect AI agents to your workflows.",
         "default": 5.0,
         "provenance": "MANUAL",
         "sectors": ["all"]
@@ -100,9 +101,9 @@ QUESTIONS = [
     {
         "id": "S2_ELECTRONIC_FLOW",
         "section": "S2",
-        "question": "Share of order/application flow that is already electronic (STP)",
+        "question": "What percentage of your customer applications are handled completely digitally?",
         "type": "percentage",
-        "help": "Determines the baseline automation starting point. Low electronic flow increases the value potential of front-office automation.",
+        "help": "This shows how much manual work remains. Lower digital adoption means a larger opportunity for AI automation.",
         "default": 60,
         "provenance": "MANUAL",
         "sectors": ["all"]
@@ -110,9 +111,9 @@ QUESTIONS = [
     {
         "id": "S2_ANNUAL_UNDERWRITING_APPS",
         "section": "S2",
-        "question": "Annual life insurance / policy applications",
+        "question": "How many policy applications do you process annually?",
         "type": "numeric",
-        "help": "Defines the transaction volume base for the automated underwriting (MAUDE) lever calculation.",
+        "help": "This sets the baseline to calculate potential savings from automated underwriting.",
         "default": 50000.0,
         "provenance": "AUTO",
         "visible_when": {"sector": ["Life & General Insurance", "Diversified Financial Services"]},
@@ -120,9 +121,9 @@ QUESTIONS = [
     {
         "id": "S2_QUOTE_TO_BIND_DAYS",
         "section": "S2",
-        "question": "Average quote-to-bind / turnaround (days)",
+        "question": "How many days does it take on average to onboard a new customer?",
         "type": "numeric",
-        "help": "Measures customer onboarding latency. High turnarounds indicate significant opportunity for automated cross-sell CDP levers.",
+        "help": "Longer wait times suggest a strong business case for using AI to speed up approvals.",
         "default": 7.0,
         "provenance": "MANUAL",
         "visible_when": {"sector": ["Life & General Insurance", "Diversified Financial Services"]},
@@ -132,9 +133,9 @@ QUESTIONS = [
     {
         "id": "S3_STP",
         "section": "S3",
-        "question": "Current overall Straight-Through Processing (STP) rate",
+        "question": "What percentage of transactions are processed without any human intervention?",
         "type": "percentage",
-        "help": "Calibrates the back-office efficiency room. Levers such as trade reconciliation target the gap between this rate and the 95% benchmark.",
+        "help": "Identifies room for back-office efficiency. AI focuses on the gap between your current rate and full automation.",
         "default": 65,
         "provenance": "MANUAL",
         "sectors": ["all"]
@@ -142,9 +143,9 @@ QUESTIONS = [
     {
         "id": "S3_TOTAL_OPS_FTE",
         "section": "S3",
-        "question": "Total FTEs dedicated to manual operations (Recon, Claims, Onboarding)",
+        "question": "How many full-time employees handle manual back-office tasks?",
         "type": "numeric",
-        "help": "Merged FTE pool representing the addressable base for operational automation and cost-saving calculations.",
+        "help": "This number is used to estimate the direct cost savings AI could achieve in operations.",
         "default": 50.0,
         "provenance": "MANUAL",
         "sectors": ["all"]
@@ -152,9 +153,9 @@ QUESTIONS = [
     {
         "id": "S3_ANNUAL_CLAIMS",
         "section": "S3",
-        "question": "Annual insurance claims processed",
+        "question": "How many insurance claims do you process annually?",
         "type": "numeric",
-        "help": "Drives the operational volume calculation for the claims processing and automated fraud detection savings model.",
+        "help": "This helps us calculate the financial impact of automating claims and detecting fraud.",
         "default": 100000.0,
         "provenance": "AUTO",
         "visible_when": {"sector": ["Life & General Insurance", "Diversified Financial Services"]},
@@ -164,9 +165,9 @@ QUESTIONS = [
     {
         "id": "S4_AML_FALSE_POS",
         "section": "S4",
-        "question": "AML false-positive alert rate",
+        "question": "What is your false-positive rate for compliance alerts (e.g., AML/KYC)?",
         "type": "percentage",
-        "help": "Calibrates efficiency gains for regulatory compliance levers. Higher rates signal immediate potential for AI triaging engines.",
+        "help": "High false positives waste valuable analyst time. This measures the immediate potential for AI triaging.",
         "default": 85,
         "provenance": "VERIFY",
         "sectors": ["all"]
@@ -174,9 +175,9 @@ QUESTIONS = [
     {
         "id": "S4_REG_MONTHS",
         "section": "S4",
-        "question": "Time to operationalize a new regulatory reporting requirement (months)",
+        "question": "How many months does it take to implement a new regulatory reporting requirement?",
         "type": "numeric",
-        "help": "Quantifies compliance overhead. Used by the compliance automation lever to estimate cycle-time acceleration savings.",
+        "help": "This highlights compliance bottlenecks and the potential for AI to accelerate reporting cycles.",
         "default": 6.0,
         "provenance": "MANUAL",
         "sectors": ["all"]
@@ -186,9 +187,9 @@ QUESTIONS = [
     {
         "id": "S5_MAINTENANCE_COST",
         "section": "S5",
-        "question": "Annual legacy system maintenance cost ($M)",
+        "question": "What is the annual cost of maintaining your legacy systems ($ Millions)?",
         "type": "numeric",
-        "help": "Feeds directly into the legacy tech debt calculation and serves as the baseline savings pool for core system modernization.",
+        "help": "This defines your technical debt and the pool of savings available if systems are modernized.",
         "default": 6.5,
         "provenance": "MANUAL",
         "sectors": ["all"]
@@ -196,9 +197,9 @@ QUESTIONS = [
     {
         "id": "S5_BIZ_VALUE",
         "section": "S5",
-        "question": "Business value delivered by legacy systems annually ($M)",
+        "question": "What is the estimated annual business value driven by your legacy systems ($ Millions)?",
         "type": "numeric",
-        "help": "Used alongside maintenance costs to compute the financial tech debt ratio of your existing tech portfolio.",
+        "help": "We compare this against maintenance costs to determine the true financial health of your legacy tech.",
         "default": 20.0,
         "provenance": "MANUAL",
         "sectors": ["all"]
@@ -206,9 +207,9 @@ QUESTIONS = [
     {
         "id": "S5_GOVERNANCE_SCORE",
         "section": "S5",
-        "question": "Overall Data Governance Maturity (1-100)",
+        "question": "How would you rate your organization's data governance maturity (1-100)?",
         "type": "numeric",
-        "help": "Determines whether core system modernization can be safely executed. Low scores block the rebuild pathway.",
+        "help": "A low score means data quality issues could block advanced AI projects until resolved.",
         "default": 50,
         "provenance": "MANUAL",
         "sectors": ["all"]

@@ -16,8 +16,9 @@ def inject_theme() -> None:
     """Inject the full CSS theme into the Streamlit app."""
     st.html(_THEME_CSS)
 
-def render_header(firm_name: str = "The Firm", sector: str = "BFSI", run_id: str = "run —") -> None:
+def render_header(firm_name: str = "The Firm", sector: str = "BFSI", run_id: str = "") -> None:
     """Render the branded top header bar with firm context pinned."""
+    run_id_html = f"<span>{run_id}</span>" if run_id else ""
     html = f"""
     <div class="hz-header">
         <div class="hz-header-left">
@@ -25,7 +26,7 @@ def render_header(firm_name: str = "The Firm", sector: str = "BFSI", run_id: str
             <span class="hz-header-sub">{firm_name} &nbsp;·&nbsp; {sector}</span>
         </div>
         <div class="hz-header-right">
-            <span>{run_id}</span>
+            {run_id_html}
             <span>ENG: 5.0.0</span>
         </div>
     </div>
@@ -103,13 +104,27 @@ h1, h2, h3, h4, h5, h6, .hz-georgia {
 /* Streamlit overrides */
 .stApp { background-color: var(--paper); }
 .stSidebar { background-color: var(--paper) !important; border-right: var(--border) !important; }
-.stSidebar [data-testid="stSidebarNav"] { display: none !important; } /* Hide default nav */
-[data-testid="stSidebarUserContent"] { padding: 0 !important; }
+.stSidebar [data-testid="stSidebarNav"] { display: none !important; } /* ─────────────────────────────────────────────────────────────────────────────
+   NATIVE STREAMLIT OVERRIDES
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Visually hide streamlit input labels to use our custom styling, but keep for screen readers */
+[data-testid="stWidgetLabel"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
 
 /* Remove default Streamlit decoration, header, footer */
-#MainMenu { visibility: hidden !important; }
+#MainMenu { visibility: hidden; }
 header { visibility: hidden !important; }
-footer { visibility: hidden !important; }
+footer { visibility: hidden; }
 [data-testid="stHeader"] { display: none !important; }
 [data-testid="stDecoration"] { display: none !important; }
 [data-testid="stFooter"] { display: none !important; }
@@ -118,11 +133,23 @@ footer { visibility: hidden !important; }
 .stApp > div.main > div.block-container {
     padding-top: 6rem !important;
     padding-bottom: 2rem !important;
-    padding-left: 2rem !important;
-    padding-right: 2rem !important;
-    max-width: 1200px !important;
+    padding-left: 5% !important;
+    padding-right: 5% !important;
+    max-width: none !important;
     margin: 0 auto !important;
 }
+
+/* Roadmap */
+.hz-roadmap { display: flex; gap: var(--sp-4); margin-bottom: var(--sp-8); }
+.hz-road-col { flex: 1; background: var(--paper); border: var(--border); border-radius: var(--radius-card); padding: var(--sp-4); }
+.hz-road-h { font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em; color: var(--g500); margin-bottom: var(--sp-2); border-bottom: 2px solid var(--g200); padding-bottom: var(--sp-2); }
+.hz-road-col.now .hz-road-h { border-bottom-color: var(--pwc-orange); color: var(--black); }
+.hz-road-col.next .hz-road-h { border-bottom-color: var(--pwc-tangerine); }
+.hz-road-col.later .hz-road-h { border-bottom-color: var(--pwc-yellow); }
+.hz-road-item { background: var(--g100); border-radius: var(--radius); padding: var(--sp-3); margin-bottom: var(--sp-3); border-left: 3px solid var(--g300); font-size: 13px; color: var(--black); font-weight: 500; }
+.hz-road-col.now .hz-road-item { border-left-color: var(--pwc-orange); background: var(--orange-tint); }
+.hz-road-col.next .hz-road-item { border-left-color: var(--pwc-tangerine); }
+.hz-road-empty { font-size: 12px; color: var(--g500); font-style: italic; }
 
 [data-testid="stSidebarUserContent"] { padding-top: 48px !important; }
 
@@ -442,10 +469,10 @@ button[kind="secondary"]:hover {
     background: radial-gradient(circle at 80% 50%, #201a15 0%, #111111 100%);
     border-top: 3px solid var(--pwc-orange);
     border-bottom: 3px solid var(--pwc-orange);
-    padding: var(--sp-8) var(--sp-8);
-    margin-left: -2rem;
-    margin-right: -2rem;
-    margin-top: -2rem;
+    padding: var(--sp-8) 5vw;
+    margin-left: -5.5vw;
+    margin-right: -5.5vw;
+    margin-top: -3rem;
     color: #FFFFFF;
     display: flex;
     justify-content: space-between;

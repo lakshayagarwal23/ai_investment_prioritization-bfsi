@@ -25,7 +25,7 @@ BFSI_COMPANIES = [
     "UTI AMC", "Yes Bank", "Other / Confidential",
 ]
 
-STEPPER_LABELS = ["COMPANY"] + [s["nav_label"] for s in SECTIONS] + ["INVESTMENT"]
+STEPPER_LABELS = ["COMPANY", "REVIEW"] + [s["nav_label"] for s in SECTIONS] + ["INVESTMENT"]
 
 _SECTION_DESCS = {
     "S1": ("Technology & Data Infrastructure", "Your data architecture and system health set the ceiling of every AI lever. This drives the Legacy Deprecation score and lever feasibility."),
@@ -40,7 +40,7 @@ def init_session_state() -> None:
     defaults = {
         "app_phase": 0, "wizard_page": 0,
         "company_name": "", "budget_usd_m": 100.0,
-        "primary_goals": ["Margin Expansion (Cost)"],
+        "primary_goals": ["Margin Expansion (Cost Reduction)"],
         "discovery_answers": {}, "discovery_provenance": {},
         "target_sector": "Mutual Funds / Asset Management",
         "current_scenario": "base",
@@ -52,30 +52,29 @@ def init_session_state() -> None:
 
 
 def _stepper(current: int) -> None:
-    parts = []
+    cols = st.columns(len(STEPPER_LABELS))
     for i, label in enumerate(STEPPER_LABELS):
-        if i == current:
-            state, num, active_lbl = "active", str(i + 1), "active"
-        elif i < current:
-            state, num, active_lbl = "done", "✓", ""
-        else:
-            state, num, active_lbl = "todo", str(i + 1), ""
-        parts.append(
-            f'<div class="hz-step"><div class="hz-step-sq {state}">{num}</div>'
-            f'<div class="hz-step-lbl {active_lbl}">{label}</div></div>'
-        )
-        if i < len(STEPPER_LABELS) - 1:
-            parts.append('<div class="hz-step-rule"></div>')
-    st.html(f'<div class="hz-stepper">{"".join(parts)}</div>')
+        with cols[i]:
+            if i < current:
+                if st.button(f"✓ {label}", key=f"step_jump_{i}", help="Jump back", use_container_width=True):
+                    st.session_state.wizard_page = i
+                    st.rerun()
+            elif i == current:
+                st.button(f"{i+1}. {label}", key=f"step_curr_{i}", disabled=True, type="primary", use_container_width=True)
+            else:
+                st.button(f"{i+1}. {label}", key=f"step_todo_{i}", disabled=True, use_container_width=True)
 
 
 def render_intake_wizard() -> None:
+    from ui.prefill_review import render_prefill_review
     page = st.session_state.wizard_page
     _stepper(page)
     if page == 0:
         _page_company()
-    elif 1 <= page <= len(SECTIONS):
-        _page_section(page - 1)
+    elif page == 1:
+        render_prefill_review()
+    elif 2 <= page <= len(SECTIONS) + 1:
+        _page_section(page - 2)
     else:
         _page_investment()
 
@@ -99,20 +98,21 @@ def _page_company() -> None:
             comp_sel, custom = st.session_state.company_name, ""
         else:
             st.html("""<div class="hz-q-row"><div class="hz-q-label-row"><span class="hz-q-label">Firm</span></div></div>""")
-            comp_sel = st.selectbox("Firm", BFSI_COMPANIES, index=0, label_visibility="collapsed")
+            comp_sel = st.selectbox("Firm", BFSI_COMPANIES, index=0)
             custom = ""
             if comp_sel == "Other / Confidential":
-                custom = st.text_input("Firm name (appears in the report)", placeholder="e.g. Quantum Asset Management", label_visibility="collapsed")
+                custom = st.text_input("Firm name (appears in the report)", placeholder="e.g. Quantum Asset Management")
 
         st.html("""<div class="hz-q-row" style="margin-top:16px;"><div class="hz-q-label-row"><span class="hz-q-label">Firm Sector</span></div>
         <div style="font-size:11px; color:var(--g500); margin-bottom:8px;">Determines which operational questions you are asked, and which levers are scored.</div></div>""")
         sectors = ["Mutual Funds / Asset Management", "Life & General Insurance", "Diversified Financial Services"]
         default_sector = st.session_state.get("target_sector", sectors[0])
-        sector = st.radio("Firm Sector", sectors, index=sectors.index(default_sector) if default_sector in sectors else 0, label_visibility="collapsed")
+        sector = st.radio("Firm Sector", sectors, index=sectors.index(default_sector) if default_sector in sectors else 0, horizontal=True)
 
         st.html("""<div class="hz-q-row" style="margin-top:16px;"><div class="hz-q-label-row"><span class="hz-q-label">Primary Strategic Objectives</span></div>
         <div style="font-size:11px; color:var(--g500); margin-bottom:8px;">Levers serving a selected goal reach full impact; off-goal levers are dampened (not hidden). Leave empty to rank purely on value and urgency.</div></div>""")
-        goals = st.multiselect("Primary Strategic Objectives", options=OBJECTIVE_INPUTS, default=st.session_state.primary_goals, label_visibility="collapsed")
+        valid_goals = [g for g in st.session_state.primary_goals if g in OBJECTIVE_INPUTS]
+        goals = st.multiselect("Primary Strategic Objectives", options=OBJECTIVE_INPUTS, default=valid_goals)
 
     _nav_buttons(None, "Next: Technology & Data", lambda: _advance_company(comp_sel, custom, goals, sector))
 
@@ -126,8 +126,13 @@ def _advance_company(sel, custom, goals, sector):
     st.session_state.target_sector = sector
 
     if company and not st.session_state.get("_search_completed", False):
-        with st.spinner("Searching public sources to prefill firm data…"):
+        import time
+        with st.status("Searching public sources to prefill firm data…", expanded=True) as status:
+            st.write("Checking Google Search (Tier 1)...")
+            time.sleep(0.5)
+            st.write("Extracting data via Gemini...")
             extracted = extract_company_data(company)
+            st.session_state.prefill_log = extracted.pop("_search_log", {})
             if "error" not in extracted:
                 st.session_state._search_success = bool(extracted)
                 official = extracted.pop("company_name", None)
@@ -142,6 +147,7 @@ def _advance_company(sel, custom, goals, sector):
             else:
                 st.session_state._search_success = False
             st.session_state._search_completed = True
+            status.update(label="Search complete!", state="complete", expanded=False)
 
     st.session_state.wizard_page += 1
 
@@ -239,14 +245,14 @@ def _render_card_question(idx: int, q: dict, answers: dict) -> None:
 
     if qtype == "numeric":
         answers[key] = st.number_input(label, value=float(current) if current is not None else 0.0,
-                                       min_value=0.0, key=f"q_{key}", label_visibility="collapsed")
+                                       min_value=0.0, key=f"q_{key}")
     elif qtype == "percentage":
         answers[key] = st.slider(label, 0, 100, int(current) if current is not None else 50, 1,
-                                 key=f"q_{key}", label_visibility="collapsed")
+                                 key=f"q_{key}")
     elif qtype == "categorical":
         opts = q["options"]
         idx0 = opts.index(current) if current in opts else 0
-        answers[key] = st.radio(label, opts, index=idx0, key=f"q_{key}", label_visibility="collapsed")
+        answers[key] = st.radio(label, opts, index=idx0, key=f"q_{key}", horizontal=True)
 
 
 # ── Final page: budget ──────────────────────────────────────────────────────
@@ -261,8 +267,9 @@ def _page_investment() -> None:
     """)
     with st.container(border=True):
         st.html("""<div class="hz-q-row"><div class="hz-q-label-row"><span class="hz-q-label">Total transformation investment (USD Millions)</span></div></div>""")
-        budget = st.slider("Total transformation investment (USD Millions)", 10, 500, int(st.session_state.budget_usd_m), 5, label_visibility="collapsed")
-        st.html(f'<div style="font-family:var(--font-head); font-size:34px; color:var(--black);">${budget}M</div>')
+        budget = st.slider("Total transformation investment (USD Millions)", 10, 500, int(st.session_state.budget_usd_m), 5)
+        st.html(f'<div style="font-family:var(--font-head); font-size:34px; color:var(--black); margin-bottom: -16px;">${budget}M</div>')
+        st.caption("Median for mid-market: $100M")
 
     _nav_buttons(lambda: _go_back(), "Generate Diagnostic", lambda: _generate(budget))
 
@@ -270,23 +277,30 @@ def _page_investment() -> None:
 def _generate(budget):
     st.session_state.budget_usd_m = float(budget)
     st.session_state.discovery_answers["target_sector"] = st.session_state.get("target_sector", "all")
-    with st.spinner("Computing ANV across levers · benchmarking against peers…"):
+    
+    with st.status("Computing AI transformation plan...", expanded=True) as status:
+        st.write("Scoring BFSI AI levers...")
         from engine.math_engine import build_investment_plan
         plan = build_investment_plan(
             st.session_state.discovery_answers, st.session_state.budget_usd_m,
             st.session_state.primary_goals, scenario=st.session_state.get("current_scenario", "base"))
         st.session_state.thesis_plan = plan
+        
+        st.write("Generating executive memo...")
         st.session_state.thesis_summary = generate_executive_summary(
             st.session_state.company_name, plan, st.session_state.discovery_answers,
             st.session_state.get("target_sector", "Financial Services"))
 
+        st.write("Logging diagnostic run...")
         from storage.audit import log_run
         st.session_state.last_run_id = log_run(
             company=st.session_state.company_name, inputs=st.session_state.discovery_answers,
             plan=plan, payload={"summary": st.session_state.thesis_summary}, mode="interactive")
 
         st.session_state.thesis_generated = True
-        st.session_state.app_phase = 2
+        st.session_state.app_phase = 3
+        status.update(label="Calculation complete!", state="complete", expanded=False)
+        
     st.rerun()
 
 
