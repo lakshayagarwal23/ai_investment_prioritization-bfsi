@@ -79,11 +79,12 @@ class LegacyInputs:
     change_mgmt: float
     unlocked_anv_m: float
     rebuild_cost_m: Optional[float] = None
+    governance_score: float = 50.0
 
 def run_diagnostic(inputs: LegacyInputs) -> dict:
     td_score = calculate_tech_debt_score(inputs.maintenance_cost_m, inputs.biz_value_m)
     frag_score = calculate_fragmentation_score(int(inputs.silo_count), inputs.architecture, inputs.api_maturity)
-    gov_score = calculate_governance_readiness_score(inputs.data_ownership, inputs.lineage, inputs.dq_sla, inputs.reg_trace, inputs.change_mgmt)
+    gov_score = inputs.governance_score
     
     dep_score = calculate_deprecation_score(td_score, frag_score, gov_score)
     verdict = get_deprecation_verdict(dep_score, gov_score)

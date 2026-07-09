@@ -331,6 +331,53 @@ LEVER_COMPUTE = {
     "lever_14": lever_14_rural_onboarding,
 }
 
+IMPACT_THRESHOLD = 65
+FEASIBILITY_THRESHOLD = 60
+
+def compute_dynamic_impact(lever: dict, answers: dict, primary_goals: list[str]) -> int:
+    from config.value_pools import CONSTANTS
+    base_impact = float(lever.get("base_impact", 50.0))
+    
+    val_driver = lever.get("value_driver")
+    if not val_driver:
+        value_pool_score = base_impact
+    else:
+        answer_key = val_driver["answer_key"]
+        typical_val = float(val_driver["typical"])
+        kind = val_driver["kind"]
+        
+        if answer_key not in answers:
+            value_pool_score = base_impact
+        else:
+            answer_val = float(answers[answer_key])
+            if kind == "scale":
+                ratio = answer_val / typical_val
+            else: # gap
+                ratio = (100.0 - answer_val) / (100.0 - typical_val) if (100.0 - typical_val) != 0 else 1.0
+                
+            vp_cap = CONSTANTS.get("Impact_ValuePool_Cap", 1.6)
+            ratio = min(ratio, vp_cap)
+            value_pool_score = base_impact * ratio
+            
+    priority_map = {"P0": 100, "P1": 75, "P2": 50, "P3": 25}
+    urgency = priority_map.get(lever.get("priority", "P2"), 50)
+    
+    wt_val_pool = CONSTANTS.get("Impact_Weight_ValuePool_Pct", 55) / 100.0
+    wt_urgency = CONSTANTS.get("Impact_Weight_Urgency_Pct", 45) / 100.0
+    raw_impact = (value_pool_score * wt_val_pool) + (urgency * wt_urgency)
+    
+    if primary_goals:
+        matched = any(goal in primary_goals for goal in lever.get("goal_alignment", []))
+        if matched:
+            goal_multiplier = 1.0
+        else:
+            goal_multiplier = CONSTANTS.get("Impact_OffGoal_Floor", 0.25)
+    else:
+        goal_multiplier = 1.0
+        
+    final_impact = raw_impact * goal_multiplier
+    return max(0, min(100, int(final_impact)))
+
 # ─────────────────────────────────────────────────────────────────────────────
 # MAIN ENTRY POINT
 # ─────────────────────────────────────────────────────────────────────────────
@@ -380,21 +427,21 @@ def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0, primar
         payback   = payback_months(impl_cost, anv)
         roi       = risk_adjusted_roi(impl_cost, anv, exec_risk)
 
-        impact      = lever.get("base_impact", 50)
+        impact      = compute_dynamic_impact(lever, answers, primary_goals)
         feasibility = compute_dynamic_feasibility(lever.get("base_feasibility", 50), answers)
         
         # CORRECT SPEED SCORE: Linear interpolation (0 to 100 based on 36 month to 1 month payback)
         speed_score = max(0, min(100, int(100 * (36 - payback) / 35)))
 
         # CORRECT QUADRANT LOGIC: Impact x Feasibility (not Speed)
-        if impact >= 65 and feasibility >= 60:
+        if impact >= IMPACT_THRESHOLD and feasibility >= FEASIBILITY_THRESHOLD:
             quadrant = "Strategic Bets"
-        elif impact < 65 and feasibility >= 60:
+        elif impact < IMPACT_THRESHOLD and feasibility >= FEASIBILITY_THRESHOLD:
             quadrant = "Quick Wins / Fill-ins"
-        elif impact >= 65 and feasibility < 60:
+        elif impact >= IMPACT_THRESHOLD and feasibility < FEASIBILITY_THRESHOLD:
             quadrant = "Park (Data-Blocked)"
         else:
-            quadrant = "Evaluate"
+            quadrant = "De-prioritize"
             
         # Goal Alignment
         goal_alignment = sum(

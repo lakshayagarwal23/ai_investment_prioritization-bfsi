@@ -16,7 +16,7 @@ def inject_theme() -> None:
     """Inject the full CSS theme into the Streamlit app."""
     st.html(_THEME_CSS)
 
-def render_header(firm_name: str = "The Firm", sector: str = "BFSI") -> None:
+def render_header(firm_name: str = "The Firm", sector: str = "BFSI", run_id: str = "run —") -> None:
     """Render the branded top header bar with firm context pinned."""
     html = f"""
     <div class="hz-header">
@@ -25,8 +25,8 @@ def render_header(firm_name: str = "The Firm", sector: str = "BFSI") -> None:
             <span class="hz-header-sub">{firm_name} &nbsp;·&nbsp; {sector}</span>
         </div>
         <div class="hz-header-right">
-            <span>ID: X84-B9</span>
-            <span>ENG: 4.0.0</span>
+            <span>{run_id}</span>
+            <span>ENG: 5.0.0</span>
         </div>
     </div>
     """
