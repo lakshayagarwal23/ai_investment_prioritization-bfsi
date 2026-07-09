@@ -9,8 +9,12 @@ Run with: streamlit run app.py
 """
 
 import os
-from dotenv import load_dotenv
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # In production (Streamlit Cloud / HF Spaces), secrets are injected natively via the platform
+    pass
 
 import streamlit as st
 
