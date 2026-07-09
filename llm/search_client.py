@@ -3,6 +3,7 @@ llm/search_client.py
 
 Uses Gemini 2.5 Flash with Google Search Grounding to extract preliminary data about a firm.
 Upgraded to support Tiered Retrieval, Provenance Objects, and JSON Schema validation.
+Uses a two-step Search-then-Extract pattern to comply with Gemini API constraints.
 """
 import os
 import json
@@ -45,39 +46,64 @@ def extract_company_data(company_name: str) -> dict:
         required=["company_name"]
     )
 
-    prompt = f"""
+    # Step 1: Search and gather context with Google Search Grounding
+    search_prompt = f"""
     Search the internet for the financial services company: "{company_name}".
     Focus on Tier A sources (regulatory filings, IRDAI disclosures, SEC 10-K) and Tier B sources (Investor Presentations).
     
-    Extract the following metrics if available:
+    Find the following information:
     1. Total Assets Under Management (AUM) or Gross Written Premium in Billions USD. (S1_AUM)
-    2. Data Architecture (S1_ARCH). Output one of: "Siloed On-Premises (Batch)", "Hybrid — partial cloud", "Cloud-Native (AWS/Azure/GCP)".
-    3. Core ERP/Policy Admin System status (S1_ERP). Output one of: "Legacy monolith (>10 years old)", "On-prem with API layer", "Modern cloud-native".
-    4. Annual life insurance / policy applications (S2_ANNUAL_UNDERWRITING_APPS)
-    5. Annual insurance claims processed (S3_ANNUAL_CLAIMS)
+    2. Core data platform / architecture status. Determine if it is Siloed On-Premises (Batch), Hybrid — partial cloud, or Cloud-Native (AWS/Azure/GCP).
+    3. Core ERP / Policy Admin System status. Determine if it is Legacy monolith (>10 years old), On-prem with API layer, or Modern cloud-native.
+    4. Annual life insurance / policy applications (if they do insurance).
+    5. Annual insurance claims processed (if they do insurance).
     
-    Also return the official, correctly spelled name of the company as 'company_name'.
-    
-    For each metric (except company_name), provide a provenance object with:
-    - value: The extracted value as a string (e.g. "50.0" or the exact category).
-    - source_url: The URL where you found this information.
-    - quote: A short excerpt justifying the value.
-    - confidence: "High" (from official Tier A/B docs), "Med" (from press releases/Tier C), or "Low" (inferred/estimated).
+    Provide the exact values, the source URLs, and a quote justifying each metric.
     """
     
     try:
-        response = client.models.generate_content(
+        search_response = client.models.generate_content(
             model='gemini-2.5-flash',
-            contents=prompt,
+            contents=search_prompt,
             config=types.GenerateContentConfig(
                 tools=[{"google_search": {}}],
+                temperature=0.0
+            )
+        )
+        
+        search_results = search_response.text
+        if not search_results:
+            return {}
+
+        # Step 2: Structured JSON extraction of search results
+        extract_prompt = f"""
+        Based on the following search results about "{company_name}", extract the metrics into the requested JSON schema.
+        
+        Search Results:
+        {search_results}
+        
+        Schema mapping instructions:
+        - company_name: Correctly spelled official company name.
+        - S1_AUM: AUM or GWP in Billions USD (value should be a string representing a float, e.g. "50.0").
+        - S1_ARCH: Data architecture. Value must be one of: "Siloed On-Premises (Batch)", "Hybrid — partial cloud", "Cloud-Native (AWS/Azure/GCP)".
+        - S1_ERP: Core ERP/Policy Admin status. Value must be one of: "Legacy monolith (>10 years old)", "On-prem with API layer", "Modern cloud-native".
+        - S2_ANNUAL_UNDERWRITING_APPS: Annual policy applications.
+        - S3_ANNUAL_CLAIMS: Annual claims processed.
+        
+        If any metric is not found in the search results, return null for that property.
+        """
+        
+        extract_response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=extract_prompt,
+            config=types.GenerateContentConfig(
                 temperature=0.0,
                 response_mime_type="application/json",
                 response_schema=response_schema
             )
         )
         
-        data = json.loads(response.text)
+        data = json.loads(extract_response.text)
         
         # Filter out nulls
         return {k: v for k, v in data.items() if v is not None}
