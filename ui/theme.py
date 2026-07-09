@@ -116,7 +116,7 @@ footer { visibility: hidden !important; }
 
 /* Push content down so header doesn't overlap, reduce margins/paddings */
 .stApp > div.main > div.block-container {
-    padding-top: 5rem !important;
+    padding-top: 6rem !important;
     padding-bottom: 2rem !important;
     padding-left: 2rem !important;
     padding-right: 2rem !important;
@@ -140,10 +140,10 @@ button[kind="primary"] {
     background-color: var(--pwc-orange) !important;
     color: white !important;
     border: none !important;
-    border-radius: 0px !important;
+    border-radius: 4px !important;
     font-family: var(--font-body) !important;
     font-weight: bold !important;
-    padding: 0.5rem 2rem !important;
+    padding: 0.6rem 2.5rem !important;
     height: auto !important;
     transition: background-color var(--dur) var(--ease) !important;
 }
@@ -154,9 +154,9 @@ button[kind="secondary"] {
     background-color: transparent !important;
     color: var(--g700) !important;
     border: 1px solid var(--g300) !important;
-    border-radius: 0px !important;
+    border-radius: 4px !important;
     font-family: var(--font-body) !important;
-    padding: 0.5rem 2rem !important;
+    padding: 0.6rem 2.5rem !important;
     height: auto !important;
 }
 button[kind="secondary"]:hover {
@@ -165,24 +165,24 @@ button[kind="secondary"]:hover {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   HEADER (Persistent)
+   HEADER (Persistent Dark Theme)
    ══════════════════════════════════════════════════════════════════════════ */
 .hz-header {
     position: fixed;
     top: 0; left: 0; right: 0;
-    height: 48px;
-    background: var(--paper);
-    border-bottom: var(--border);
+    height: 60px;
+    background: #111111;
+    border-bottom: 2px solid var(--pwc-orange);
     z-index: 1000000;
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 0 var(--sp-6);
 }
-.hz-header-left { display: flex; align-items: baseline; gap: var(--sp-4); }
-.hz-header-title { font-family: var(--font-head); font-size: 19px; color: var(--black); }
-.hz-header-sub { font-family: var(--font-body); font-size: 13px; color: var(--g500); }
-.hz-header-right { display: flex; gap: var(--sp-4); font-family: monospace; font-size: 12px; color: var(--g500); }
+.hz-header-left { display: flex; align-items: center; gap: var(--sp-4); }
+.hz-header-title { font-family: var(--font-head); font-size: 19px; color: #FFFFFF; font-weight: bold; }
+.hz-header-sub { font-family: var(--font-body); font-size: 11px; color: var(--g300); text-transform: uppercase; letter-spacing: 0.05em; }
+.hz-header-right { display: flex; gap: var(--sp-4); font-family: monospace; font-size: 11px; color: var(--g300); }
 
 /* ══════════════════════════════════════════════════════════════════════════
    SIDEBAR & WIZARD
@@ -435,6 +435,61 @@ button[kind="secondary"]:hover {
 .hz-feat-col-desc {
     font-size: 14px; color: var(--g700);
     line-height: 1.4;
+}
+
+/* Custom Hero Layout Styles (v5 Redesign) */
+.hz-hero-container {
+    background: radial-gradient(circle at 80% 50%, #201a15 0%, #111111 100%);
+    border-top: 3px solid var(--pwc-orange);
+    border-bottom: 3px solid var(--pwc-orange);
+    padding: var(--sp-8) var(--sp-8);
+    margin-left: -2rem;
+    margin-right: -2rem;
+    margin-top: -2rem;
+    color: #FFFFFF;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--sp-8);
+}
+.hz-hero-container h1 {
+    color: #FFFFFF !important;
+}
+.hz-hero-pill-orange {
+    border: 1px solid var(--pwc-orange);
+    color: var(--pwc-orange);
+    background: rgba(208,74,2,0.1);
+    font-size: 11px;
+    font-weight: bold;
+    padding: 4px 12px;
+    border-radius: 50px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.hz-hero-badge {
+    background: #1e1e1e;
+    color: var(--g300);
+    border: 1px solid #333333;
+    font-size: 11px;
+    padding: 6px 12px;
+    border-radius: 50px;
+}
+.hz-hero-card {
+    background: #161616;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    width: 380px;
+    padding: var(--sp-4);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    text-align: left;
+}
+.hz-hero-mini-card {
+    flex: 1;
+    background: #202020;
+    border: 1px solid #333333;
+    border-radius: 4px;
+    padding: var(--sp-3) var(--sp-2);
+    text-align: center;
 }
 </style>
 

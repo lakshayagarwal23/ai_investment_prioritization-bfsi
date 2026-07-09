@@ -6,92 +6,103 @@ Renders as Phase 0 — concise C-suite overview before intake begins.
 """
 
 import streamlit as st
-from llm.search_client import extract_company_data
 
-# ─────────────────────────────────────────────────────────────────────────────
-# HTML SECTIONS (PwC Horizon Redesign)
-# ─────────────────────────────────────────────────────────────────────────────
-
-_HERO_HTML_TOP = """
-<div class="hz-landing" style="padding-bottom: var(--sp-4);">
-    <div style="font-family: var(--font-body); font-size: 11px; font-weight: 600; color: var(--g500); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: var(--sp-4);">
-        BFSI / Asset Management &nbsp;·&nbsp; Strategic Intelligence
+_HERO_BANNER_HTML = """
+<div class="hz-hero-container">
+    <div style="flex: 1.2;">
+        <span class="hz-hero-pill-orange">BFSI &middot; STRATEGIC INTELLIGENCE V5.0</span>
+        <h1 style="font-family: var(--font-head); font-size: 48px; color: #FFFFFF; margin-top: 16px; margin-bottom: 16px; font-weight: bold; line-height: 1.1;">
+            AI Investment<br><span style="color: var(--pwc-orange);">Prioritisation</span>
+        </h1>
+        <p style="font-size: 16px; color: var(--g300); line-height: 1.4; margin-bottom: 24px;">
+            Bottom-up capital allocation for Asset & Wealth Management transformation programmes.<br>
+            Peer-benchmarked. Risk-adjusted. Board-ready.
+        </p>
+        <div style="display: flex; gap: var(--sp-2); flex-wrap: wrap;">
+            <span class="hz-hero-badge">Bottom-Up Financial Modeling</span>
+            <span class="hz-hero-badge">14 Peer Levers</span>
+            <span class="hz-hero-badge">Risk-Adjusted Projections</span>
+            <span class="hz-hero-badge">Gemini AI Intel</span>
+        </div>
     </div>
-    <h1 class="hz-landing-h1">
-        AI investment prioritisation &mdash;<br>
-        <span style="color: var(--pwc-orange);">BFSI diagnostic</span>
-    </h1>
-    <p class="hz-landing-desc" style="margin-bottom: var(--sp-4);">
-        Bottom-up capital allocation for Asset Management transformation programmes.<br>
-        Peer-benchmarked. Risk-adjusted. Board-ready.
-    </p>
+    <div style="flex: 0.8; display: flex; justify-content: flex-end;">
+        <div class="hz-hero-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333333; padding-bottom: 12px; margin-bottom: 16px;">
+                <span style="font-size: 10px; font-weight: bold; color: var(--g300); text-transform: uppercase; letter-spacing: 0.05em;">● AI Investment Prioritisation</span>
+                <span style="background: #2a1e17; color: var(--pwc-orange); border: 1px solid var(--pwc-orange); font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 2px;">GENERATED</span>
+            </div>
+            <div style="display: flex; gap: var(--sp-2); margin-bottom: 16px;">
+                <div class="hz-hero-mini-card">
+                    <div style="font-size: 16px; font-weight: bold; color: #FFFFFF;">185%</div>
+                    <div style="font-size: 8px; color: var(--g300); text-transform: uppercase;">Portfolio ROI</div>
+                </div>
+                <div class="hz-hero-mini-card">
+                    <div style="font-size: 16px; font-weight: bold; color: #FFFFFF;">21mo</div>
+                    <div style="font-size: 8px; color: var(--g300); text-transform: uppercase;">Payback</div>
+                </div>
+                <div class="hz-hero-mini-card">
+                    <div style="font-size: 16px; font-weight: bold; color: #FFFFFF;">&plusmn;20%</div>
+                    <div style="font-size: 8px; color: var(--g300); text-transform: uppercase;">Confidence</div>
+                </div>
+            </div>
+            <div style="font-size: 10px; color: var(--g300); text-transform: uppercase; margin-bottom: 8px; font-weight: bold;">Top Value Levers</div>
+            <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 6px;">
+                <span style="color: #FFFFFF;">● Agentic Trade Reconciliation</span>
+                <span style="font-family: monospace; color: var(--g300);">$14.5M</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 6px;">
+                <span style="color: #FFFFFF;">● Data Platform Golden Source</span>
+                <span style="font-family: monospace; color: var(--g300);">$30.0M</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 11px;">
+                <span style="color: #FFFFFF;">● Underwriting Automation (MAUDE)</span>
+                <span style="font-family: monospace; color: var(--g300);">$10.5M</span>
+            </div>
+        </div>
+    </div>
 </div>
 """
 
-_HERO_HTML_BOTTOM = """
-<div class="hz-landing" style="padding-top: var(--sp-6);">
-    <div class="hz-feat-grid" style="margin-top: 0;">
-        <div class="hz-feat-col">
-            <div class="hz-feat-col-title">Peer Benchmarks</div>
-            <div class="hz-feat-col-desc">Capital allocation triangulated against 10+ public BFSI leaders including BlackRock, Vanguard, and HDFC.</div>
-        </div>
-        <div class="hz-feat-col">
-            <div class="hz-feat-col-title">Bottom-Up Financials</div>
-            <div class="hz-feat-col-desc">Line-item deployment across 14 distinct BFSI use cases with traceable ROI assumptions.</div>
-        </div>
-        <div class="hz-feat-col">
-            <div class="hz-feat-col-title">Risk-Adjusted</div>
-            <div class="hz-feat-col-desc">Data fragmentation and organisational resistance automatically adjust execution feasibility.</div>
-        </div>
-    </div>
-    
-    <div style="margin-top: var(--sp-10); border-top: 1px solid var(--g200); padding-top: var(--sp-6);">
-        <div style="font-family: var(--font-head); font-size: 20px; color: var(--black); margin-bottom: var(--sp-4);">How It Works</div>
-        <div style="display: flex; gap: var(--sp-6); font-size: 13px; line-height: 1.4; color: var(--g700);">
-            <div style="flex:1;">
-                <strong style="color: var(--pwc-orange); font-family: var(--font-head); font-size: 16px;">1. Strategic Intake</strong><br>
-                Calibrate baseline KPIs, operations, regulatory posture, and legacy system context in 7 quick steps.
-            </div>
-            <div style="flex:1;">
-                <strong style="color: var(--pwc-orange); font-family: var(--font-head); font-size: 16px;">2. Scenario Evaluation</strong><br>
-                The engine applies multi-year benefit realization curves and data constraint penalties.
-            </div>
-            <div style="flex:1;">
-                <strong style="color: var(--pwc-orange); font-family: var(--font-head); font-size: 16px;">3. Executive Output</strong><br>
-                Produce a board-ready prioritization matrix, custom implementation roadmap, and strategic executive memo.
-            </div>
-        </div>
-    </div>
+_CAPABILITIES_HTML = """
+<div style="text-align: center; margin-top: 48px; margin-bottom: 24px;">
+    <div style="font-size: 11px; font-weight: bold; color: var(--pwc-orange); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px;">Platform Capabilities</div>
+    <h2 style="font-family: var(--font-head); font-size: 32px; color: var(--black); font-weight: bold; margin: 0;">From intake to board-ready thesis. One session.</h2>
+</div>
 
-    <div style="margin-top: var(--sp-12); border-top: 1px solid var(--g200); padding-top: var(--sp-4); display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-family: var(--font-head); font-size: 24px; color: var(--pwc-orange); font-weight: bold;">pwc</span>
-        <span style="font-size: 11px; color: var(--g500);">Powered by Gemini 2.5 Flash &middot; 14 BFSI Value Pools &middot; v4.0.0</span>
+<div style="display: flex; gap: var(--sp-6); margin-top: 24px; margin-bottom: 48px;">
+    <div style="flex: 1; padding: 24px; border: 1px solid var(--g200); border-radius: 4px;">
+        <div style="font-family: var(--font-head); font-size: 36px; color: var(--pwc-orange); opacity: 0.3; margin-bottom: 12px; line-height: 1;">01</div>
+        <div style="font-family: var(--font-head); font-size: 16px; font-weight: bold; color: var(--black); margin-bottom: 6px;">Strategic Intake</div>
+        <div style="font-size: 13px; color: var(--g700); line-height: 1.4;">Calibrate baseline KPIs, tech stack maturity, compliance posture, and legacy footprint.</div>
     </div>
+    <div style="flex: 1; padding: 24px; border: 1px solid var(--g200); border-radius: 4px;">
+        <div style="font-family: var(--font-head); font-size: 36px; color: var(--pwc-orange); opacity: 0.3; margin-bottom: 12px; line-height: 1;">02</div>
+        <div style="font-family: var(--font-head); font-size: 16px; font-weight: bold; color: var(--black); margin-bottom: 6px;">Scenario Evaluation</div>
+        <div style="font-size: 13px; color: var(--g700); line-height: 1.4;">Evaluate multi-year realization curves, platform prerequisites, and governance constraints.</div>
+    </div>
+    <div style="flex: 1; padding: 24px; border: 1px solid var(--g200); border-radius: 4px;">
+        <div style="font-family: var(--font-head); font-size: 36px; color: var(--pwc-orange); opacity: 0.3; margin-bottom: 12px; line-height: 1;">03</div>
+        <div style="font-family: var(--font-head); font-size: 16px; font-weight: bold; color: var(--black); margin-bottom: 6px;">Executive Output</div>
+        <div style="font-size: 13px; color: var(--g700); line-height: 1.4;">Produce a prioritized investment roadmap, legacy verdicts, and strategic C-suite memo.</div>
+    </div>
+</div>
+
+<div style="margin-top: 48px; border-top: 1px solid var(--g200); padding-top: 16px; display: flex; justify-content: space-between; align-items: center;">
+    <span style="font-family: var(--font-head); font-size: 24px; color: var(--pwc-orange); font-weight: bold;">pwc</span>
+    <span style="font-size: 11px; color: var(--g500);">Powered by Gemini 2.5 Flash &middot; 14 BFSI Value Pools &middot; v5.0.0</span>
 </div>
 """
 
 def render_landing_page() -> None:
     """Render the landing hero and handle the intake initiation."""
-    st.html(_HERO_HTML_TOP)
+    st.html(_HERO_BANNER_HTML)
+    st.write("")
     
-    import os
-    if not os.environ.get("GEMINI_API_KEY") and not st.session_state.get("gemini_api_key"):
-        st.html("""
-        <div style="background: var(--orange-tint); border: 1px solid var(--pwc-orange); padding: var(--sp-4); border-radius: var(--radius-card); margin-bottom: var(--sp-4);">
-            <strong style="color: var(--pwc-orange);">LLM Narrative & Search Prefill Enabled</strong><br>
-            <span style="font-size: 13px; color: var(--g700);">Provide a Gemini API Key to activate web scraping and executive summary generation.</span>
-        </div>
-        """)
-        api_key_val = st.text_input("Gemini API Key", type="password", key="gemini_key_input")
-        if api_key_val:
-            st.session_state.gemini_api_key = api_key_val
-            st.rerun()
-            
-    # Left align the button within the landing container limit
-    col1, _ = st.columns([1, 3])
-    with col1:
-        if st.button("Begin Diagnostic", type="primary", use_container_width=True):
+    # Centered wide assessment button
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button("Begin Assessment →", type="primary", use_container_width=True):
             st.session_state.app_phase = 1
             st.rerun()
 
-    st.html(_HERO_HTML_BOTTOM)
+    st.html(_CAPABILITIES_HTML)
