@@ -25,6 +25,9 @@ claude_engine.patch
 debug_test.py
 last_message.txt
 *.log
+AI_Investment_Engine_Enterprise_Review.md
+build_framework.py
+test_ui.py
 
 # OS generated files
 .DS_Store
