@@ -357,49 +357,139 @@ def render_foundation_decision() -> None:
                 <td class="num"><strong>${pos['remaining_m']:.1f}M</strong></td></tr>
           </tbody>
         </table>
-        <div style="{_CAPTION}">This reflects the plan as it stands. It updates the moment
-        you change the decision below or switch scenario.</div>
+        <div style="{_CAPTION}">Capital is committed only where a use case clears the bar:
+        positive net value and executable now. The uncommitted balance is held, not spent,
+        because funding weak cases just to use up a budget destroys value.</div>
         """)
+
+    # Full transparency: every dollar in the two committed lines, itemized.
+    plan_now = st.session_state.get("thesis_plan") or []
+    funded_levers = [p for p in plan_now
+                     if p.get("budget_approved") and p["id"] != "lever_0_foundation"]
+    with st.expander(f"What makes up the ${pos['levers_m']:.1f}M committed to AI use cases"):
+        rows = "".join(
+            f'<tr><td>{html.escape(p["name"])}</td>'
+            f'<td class="num">${p["impl_cost"]/1e6:.1f}M</td>'
+            f'<td class="num">${p["anv_m"]:.1f}M / yr</td>'
+            f'<td class="num">{p["payback"]:.0f} mo</td></tr>'
+            for p in sorted(funded_levers, key=lambda x: -x["impl_cost"]))
+        st.html(f"""
+        <table class="hz-table-wrap">
+          <thead><tr><th>Use case</th><th style="text-align:right;">Build cost</th>
+          <th style="text-align:right;">Annual value</th><th style="text-align:right;">Payback</th></tr></thead>
+          <tbody>{rows}
+            <tr style="border-top:2px solid var(--g300);"><td><strong>Total committed to AI use cases</strong></td>
+                <td class="num"><strong>${pos['levers_m']:.1f}M</strong></td><td></td><td></td></tr>
+          </tbody>
+        </table>
+        <div style="{_CAPTION}">Each build cost is that use case's implementation estimate from the
+        lever library; the full scorecard with impact and readiness is on The Portfolio tab.</div>
+        """)
+    if pos["modern_m"] > 0 and est:
+        with st.expander(f"What makes up the ${pos['modern_m']:.1f}M committed to modernization"):
+            rows = "".join(
+                f'<tr><td>{html.escape(c["component"])}</td>'
+                f'<td class="num">${c["amount_m"]}M</td>'
+                f'<td style="{_CAPTION}">{html.escape(c["basis"])}</td></tr>'
+                for c in est["breakdown"])
+            st.html(f'<table class="hz-table-wrap"><thead><tr><th>Component</th>'
+                    f'<th style="text-align:right;">Estimate</th><th>What drives it</th></tr></thead>'
+                    f'<tbody>{rows}</tbody></table>')
 
     # ── 5. The decision ──────────────────────────────────────────────────────
     st.html('<div class="hz-report-h2">5. Your decision: does modernization go into the plan?</div>')
-    st.html(f'<div style="{_BODY} margin-bottom:12px;">One question: does legacy modernization '
-            'go into your investment plan? Your choice reshapes The Recommendation and '
-            'The Portfolio tabs, and you can change it at any time.</div>')
 
-    recommend_fund = res["recommend_funding"] and sf["payback_months"] is not None
-    rec_a = ' <span class="hz-chip auto">RECOMMENDED</span>' if recommend_fund else ""
-    rec_b = "" if recommend_fund else ' <span class="hz-chip auto">RECOMMENDED</span>'
+    # Recommendation is earned, not decorative. A pure cost play must break
+    # even within 4 years. Only a MATERIAL unlock (at least $1M/yr and 5% of
+    # the rebuild cost per year) relaxes that bar to 6 years. Otherwise the
+    # capital works harder in the AI use cases.
+    material_unlock = unlocked_anv_m >= max(1.0, 0.05 * sf["rebuild_cost_m"])
+    pb_limit = 72 if material_unlock else 48
+    recommend_fund = (res["recommend_funding"]
+                      and sf["payback_months"] is not None
+                      and sf["payback_months"] <= pb_limit)
+    if recommend_fund:
+        rec_reason = (f"the estate verdict is {res['verdict'].title()} and the spend breaks even "
+                      f"in {sf['payback_months']} months")
+        if material_unlock:
+            rec_reason += (f" while activating {len(blocked)} blocked use case(s) "
+                           f"worth ${unlocked_anv_m:.1f}M per year")
+    elif res["recommend_funding"]:
+        rec_reason = (f"although the estate deserves intervention, on your numbers the rebuild "
+                      f"takes {sf['payback_months'] or 'too many'} months to earn its keep"
+                      + (f" and the ${unlocked_anv_m:.1f}M per year it unblocks is marginal "
+                         f"against a ${sf['rebuild_cost_m']}M spend" if blocked
+                         else " and unblocks no AI value")
+                      + ", so this capital works harder in the AI use cases for now")
+    else:
+        rec_reason = f"the estate verdict is {res['verdict'].title()}"
+    rec_label = "include modernization" if recommend_fund else "defer modernization"
+    st.html(f'<div style="{_BODY} margin-bottom:12px;">Our recommendation is to '
+            f'<strong>{rec_label}</strong>, because {rec_reason}. The decision remains yours, '
+            f'and you can change it at any time.</div>')
 
-    col_a, col_b = st.columns(2)
-    with col_a:
+    unlock_bullet_a = (f"<li>Activates {len(blocked)} parked use case(s) worth ${unlocked_anv_m:.1f}M per year</li>"
+                       if blocked else
+                       "<li>Unblocks nothing today: no use case is currently parked behind the estate</li>")
+    unlock_bullet_b = (f"<li>{len(blocked)} use case(s) stay parked; ${unlocked_anv_m:.1f}M per year stays locked</li>"
+                       if blocked else
+                       "<li>Nothing stays locked: no use case is currently blocked by the estate</li>")
+
+    if decision is None:
+        rec_a = ' <span class="hz-chip auto">RECOMMENDED</span>' if recommend_fund else ""
+        rec_b = "" if recommend_fund else ' <span class="hz-chip auto">RECOMMENDED</span>'
+        col_a, col_b = st.columns(2)
+        with col_a:
+            with st.container(border=True):
+                st.html(f"""
+                <div style="font-family:var(--font-head); font-size:18px; color:var(--black); margin-bottom:8px;">
+                    Option A. Include modernization{rec_a}</div>
+                <ul style="{_BODY} padding-left:18px; margin:0 0 12px;">
+                    <li>Commits ${sf['rebuild_cost_m']}M of the budget to the rebuild</li>
+                    <li>Stops ${sf['legacy_annual_savings_m']}M per year of maintenance spend</li>
+                    {unlock_bullet_a}
+                </ul>
+                """)
+                if st.button("Include modernization in the plan", key="fund_foundation",
+                             type="primary" if recommend_fund else "secondary",
+                             use_container_width=True):
+                    _apply_decision(True)
+        with col_b:
+            with st.container(border=True):
+                st.html(f"""
+                <div style="font-family:var(--font-head); font-size:18px; color:var(--black); margin-bottom:8px;">
+                    Option B. Defer it{rec_b}</div>
+                <ul style="{_BODY} padding-left:18px; margin:0 0 12px;">
+                    <li>No rebuild spend now. Budget stays on fast-payback use cases</li>
+                    {unlock_bullet_b}
+                    <li>The ${tco['annual_maintenance_m']}M per year maintenance bill continues</li>
+                </ul>
+                """)
+                if st.button("Keep it out of the plan for now", key="defer_foundation",
+                             type="primary" if not recommend_fund else "secondary",
+                             use_container_width=True):
+                    _apply_decision(False)
+    else:
+        # Decision taken: show ONE summary card and a single switch action,
+        # so the page reads as a record of the decision, not a repeated ask.
+        if decision:
+            summary = (f"Modernization is <strong>in the plan</strong>: "
+                       f"${sf['rebuild_cost_m']}M committed, "
+                       f"${sf['legacy_annual_savings_m']}M per year of maintenance ends"
+                       + (f", {len(blocked)} use case(s) activated" if blocked else ""))
+            switch_label = "Change decision: take modernization out of the plan"
+        else:
+            summary = (f"Modernization is <strong>not in the plan</strong>: "
+                       f"no rebuild spend, and the ${tco['annual_maintenance_m']}M per year "
+                       f"maintenance bill continues"
+                       + (f"; ${unlocked_anv_m:.1f}M per year stays locked" if blocked else ""))
+            switch_label = "Change decision: put modernization into the plan"
         with st.container(border=True):
-            st.html(f"""
-            <div style="font-family:var(--font-head); font-size:18px; color:var(--black); margin-bottom:8px;">
-                Option A. Include modernization{rec_a}</div>
-            <ul style="{_BODY} padding-left:18px; margin:0 0 12px;">
-                <li>Commits ${sf['rebuild_cost_m']}M of the budget to the rebuild</li>
-                <li>Stops ${sf['legacy_annual_savings_m']}M per year of maintenance spend</li>
-                <li>Activates {len(blocked)} parked use case(s) worth ${unlocked_anv_m:.1f}M per year</li>
-            </ul>
-            """)
-            if st.button("Include modernization in the plan", key="fund_foundation", type="primary",
-                         use_container_width=True, disabled=(decision is True)):
-                _apply_decision(True)
-    with col_b:
-        with st.container(border=True):
-            st.html(f"""
-            <div style="font-family:var(--font-head); font-size:18px; color:var(--black); margin-bottom:8px;">
-                Option B. Defer it{rec_b}</div>
-            <ul style="{_BODY} padding-left:18px; margin:0 0 12px;">
-                <li>No rebuild spend now. Budget stays on fast-payback use cases</li>
-                <li>{len(blocked)} use case(s) stay parked; ${unlocked_anv_m:.1f}M per year stays locked</li>
-                <li>The ${tco['annual_maintenance_m']}M per year maintenance bill continues</li>
-            </ul>
-            """)
-            if st.button("Keep it out of the plan for now", key="defer_foundation",
-                         use_container_width=True, disabled=(decision is False)):
-                _apply_decision(False)
+            st.html(f'<div style="{_BODY} margin-bottom:12px;">'
+                    f'<span style="font-family:var(--font-head); font-size:16px; color:var(--black);">'
+                    f'Decision recorded.</span><br>{summary}.</div>')
+            if st.button(switch_label, key="switch_foundation", use_container_width=True):
+                _apply_decision(not decision)
 
     # ── 6. Safeguards ────────────────────────────────────────────────────────
     st.html('<div class="hz-report-h2">6. If you proceed: transition safeguards</div>')

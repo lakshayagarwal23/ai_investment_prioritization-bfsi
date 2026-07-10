@@ -530,6 +530,71 @@ button[kind="secondary"]:hover {
     padding: var(--sp-3) var(--sp-2);
     text-align: center;
 }
+
+/* Hero "what you receive" rows */
+.hz-hero-row {
+    display: flex;
+    gap: 12px;
+    padding: 14px 0;
+    border-bottom: 1px solid #262626;
+    align-items: flex-start;
+}
+.hz-hero-row-num {
+    font-family: var(--font-head);
+    font-size: 15px;
+    color: var(--pwc-orange);
+    line-height: 1.3;
+    min-width: 24px;
+}
+.hz-hero-row-title {
+    font-family: var(--font-body);
+    font-size: 13.5px;
+    font-weight: bold;
+    color: #FFFFFF;
+    margin-bottom: 3px;
+}
+.hz-hero-row-desc {
+    font-family: var(--font-body);
+    font-size: 12px;
+    color: var(--g300);
+    line-height: 1.5;
+}
+
+/* "How it works" step cards */
+.hz-step-card {
+    flex: 1;
+    padding: 24px;
+    border: 1px solid var(--g200);
+    border-radius: var(--radius-card);
+    transition: border-color var(--dur) var(--ease), transform var(--dur) var(--ease),
+                box-shadow var(--dur) var(--ease);
+}
+.hz-step-card:hover {
+    border-color: var(--pwc-orange);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(45,45,45,0.08);
+}
+.hz-step-card-num {
+    font-family: var(--font-head);
+    font-size: 32px;
+    color: var(--pwc-orange);
+    opacity: 0.35;
+    line-height: 1;
+    margin-bottom: 12px;
+}
+.hz-step-card-title {
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: bold;
+    color: var(--black);
+    margin-bottom: 6px;
+}
+.hz-step-card-desc {
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--g700);
+    line-height: 1.55;
+}
 </style>
 
 """
