@@ -234,6 +234,40 @@ def test_diagnostic_verdicts_move_with_inputs():
         assert "—" not in text, "em dashes are banned from report copy"
 
 
+# ── Bottom-up rebuild cost model ──────────────────────────────────────────────
+
+def test_rebuild_estimate_is_bottom_up_and_sums():
+    from engine.legacy_diagnostic import estimate_rebuild_cost
+    est = estimate_rebuild_cost(6.5, 5, "Hybrid — partial cloud",
+                                "On-prem with API layer", 50)
+    assert abs(sum(c["amount_m"] for c in est["breakdown"]) - est["total_m"]) < 0.5
+    assert est["low_m"] < est["total_m"] < est["high_m"]
+    assert len(est["breakdown"]) == 6
+    for c in est["breakdown"]:
+        assert c["basis"], "every cost line must state its driver"
+
+
+def test_rebuild_estimate_responds_to_complexity():
+    from engine.legacy_diagnostic import estimate_rebuild_cost
+    easy = estimate_rebuild_cost(10, 3, "Cloud-Native (AWS/Azure/GCP)",
+                                 "Modern cloud-native", 85)
+    hard = estimate_rebuild_cost(10, 9, "Siloed On-Premises (Batch)",
+                                 "Legacy monolith (>10 years old)", 25)
+    assert hard["total_m"] > easy["total_m"] * 1.5, \
+        "a monolithic, siloed, ungoverned estate must cost far more to replace"
+
+
+def test_diagnostic_carries_rebuild_breakdown():
+    from engine.legacy_diagnostic import run_diagnostic
+    res = run_diagnostic(_legacy_inputs())
+    assert res["rebuild_estimate"] is not None
+    assert res["self_funding"]["rebuild_cost_m"] == res["rebuild_estimate"]["total_m"]
+    # a client-provided figure overrides the model and disables the breakdown
+    res2 = run_diagnostic(_legacy_inputs(rebuild_cost_m=30.0))
+    assert res2["self_funding"]["rebuild_cost_m"] == 30.0
+    assert res2["rebuild_estimate"] is None
+
+
 # ── Foundation decision ───────────────────────────────────────────────────────
 
 def test_foundation_lever_is_coherent():

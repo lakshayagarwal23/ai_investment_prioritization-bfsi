@@ -148,7 +148,8 @@ footer { visibility: hidden; }
 .hz-road-col.now .hz-road-h { border-bottom-color: var(--pwc-orange); color: var(--black); }
 .hz-road-col.next .hz-road-h { border-bottom-color: var(--pwc-tangerine); }
 .hz-road-col.later .hz-road-h { border-bottom-color: var(--pwc-yellow); }
-.hz-road-item { background: var(--g100); border-radius: var(--radius); padding: var(--sp-3); margin-bottom: var(--sp-3); border-left: 3px solid var(--g300); font-size: 13px; color: var(--black); font-weight: 500; }
+.hz-road-item { background: var(--g100); border-radius: var(--radius); padding: var(--sp-3); margin-bottom: var(--sp-3); border-left: 3px solid var(--g300); font-size: 13px; color: var(--black); font-weight: 500; transition: border-left-color var(--dur) var(--ease), background var(--dur) var(--ease); }
+.hz-road-item:hover { border-left-color: var(--pwc-orange); background: var(--orange-tint); }
 .hz-road-col.now .hz-road-item { border-left-color: var(--pwc-orange); background: var(--orange-tint); }
 .hz-road-col.next .hz-road-item { border-left-color: var(--pwc-tangerine); }
 .hz-road-empty { font-size: 12px; color: var(--g500); font-style: italic; }
@@ -329,6 +330,15 @@ button[kind="secondary"]:hover {
     border-radius: var(--radius-card);
     padding: var(--sp-4);
     display: flex; flex-direction: column; gap: var(--sp-2);
+}
+.hz-kpi-tile {
+    transition: border-color var(--dur) var(--ease), transform var(--dur) var(--ease),
+                box-shadow var(--dur) var(--ease);
+}
+.hz-kpi-tile:hover {
+    border-color: var(--pwc-orange);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(45,45,45,0.08);
 }
 .hz-kpi-hero { border-top: 4px solid var(--pwc-orange); }
 .hz-kpi-lbl {

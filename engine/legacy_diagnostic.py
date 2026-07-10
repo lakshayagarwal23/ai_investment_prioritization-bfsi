@@ -131,6 +131,86 @@ VERDICT_PLAYBOOK = {
 }
 
 
+# ── Bottom-up rebuild cost model ─────────────────────────────────────────────
+# Replaces the old flat "3.5x maintenance" heuristic. Each component is priced
+# from an asked input and a declared driver, industry practice for
+# modernization estimates: discovery, core rebuild (complexity-driven), data
+# migration (quality-driven), integration rewiring, parallel-run testing
+# (mandatory in regulated BFSI), training, and contingency.
+
+CORE_COMPLEXITY = {          # rebuild cost as a multiple of annual maintenance
+    "legacy monolith": 2.2,  # undocumented code, no separable modules
+    "on-prem": 1.7,          # partially separable, API layer exists
+    "modern": 1.2,           # mostly re-platforming, little rewriting
+}
+ARCH_COMPLEXITY_UPLIFT = {"siloed": 0.30, "hybrid": 0.15, "cloud-native": 0.0}
+MIGRATION_COST_PER_SILO_M = 0.35   # extract, cleanse, reconcile one data estate
+INTEGRATION_COST_PER_SILO_M = 0.15  # re-point every interface that fed it
+TESTING_PARALLEL_RUN_PCT = 15       # of build+migration: dual-run before cutover
+TRAINING_CHANGE_PCT = 8             # of subtotal: new workflows need adoption
+CONTINGENCY_PCT = 15                # industry norm: quotes understate by ~30-45%
+ESTIMATE_RANGE_PCT = 20             # presented as a range, not false precision
+
+
+def estimate_rebuild_cost(maintenance_cost_m: float, silo_count: float,
+                          architecture: str, api_maturity: str,
+                          governance_score: float) -> dict:
+    """Bottom-up modernization estimate. Returns total, low/high range, and a
+    component-by-component breakdown with the driver behind each line."""
+    api_l, arch_l = api_maturity.lower(), architecture.lower()
+    if "monolith" in api_l:
+        core_mult, core_why = CORE_COMPLEXITY["legacy monolith"], "legacy monolith core (2.2x)"
+    elif "modern" in api_l or "cloud-native" in api_l:
+        core_mult, core_why = CORE_COMPLEXITY["modern"], "modern core (1.2x)"
+    else:
+        core_mult, core_why = CORE_COMPLEXITY["on-prem"], "on-prem core with API layer (1.7x)"
+    if "siloed" in arch_l:
+        arch_up, arch_why = ARCH_COMPLEXITY_UPLIFT["siloed"], "+0.3 siloed on-premises estate"
+    elif "cloud-native" in arch_l:
+        arch_up, arch_why = ARCH_COMPLEXITY_UPLIFT["cloud-native"], "no architecture uplift (cloud-native)"
+    else:
+        arch_up, arch_why = ARCH_COMPLEXITY_UPLIFT["hybrid"], "+0.15 hybrid estate"
+
+    core = maintenance_cost_m * (core_mult + arch_up)
+
+    gov = max(0.0, min(100.0, governance_score))
+    if gov < 40:
+        dq_mult, dq_why = 1.5, "weak governance: heavy cleansing (x1.5)"
+    elif gov < 70:
+        dq_mult, dq_why = 1.2, "partial governance: moderate cleansing (x1.2)"
+    else:
+        dq_mult, dq_why = 1.0, "strong governance: data migrates as-is"
+    migration = silo_count * MIGRATION_COST_PER_SILO_M * dq_mult
+    integration = silo_count * INTEGRATION_COST_PER_SILO_M
+
+    build_subtotal = core + migration + integration
+    testing = build_subtotal * TESTING_PARALLEL_RUN_PCT / 100.0
+    training = (build_subtotal + testing) * TRAINING_CHANGE_PCT / 100.0
+    contingency = (build_subtotal + testing + training) * CONTINGENCY_PCT / 100.0
+    total = build_subtotal + testing + training + contingency
+
+    breakdown = [
+        {"component": "Core platform rebuild", "amount_m": round(core, 1),
+         "basis": f"${maintenance_cost_m:g}M maintenance x complexity ({core_why}, {arch_why})"},
+        {"component": "Data migration and cleansing", "amount_m": round(migration, 1),
+         "basis": f"{int(silo_count)} data estates x ${MIGRATION_COST_PER_SILO_M}M each; {dq_why}"},
+        {"component": "Integration rewiring", "amount_m": round(integration, 1),
+         "basis": f"{int(silo_count)} estates x ${INTEGRATION_COST_PER_SILO_M}M to re-point every interface"},
+        {"component": "Testing and parallel run", "amount_m": round(testing, 1),
+         "basis": f"{TESTING_PARALLEL_RUN_PCT}% of build: old and new run side by side before cutover (regulatory requirement)"},
+        {"component": "Training and change management", "amount_m": round(training, 1),
+         "basis": f"{TRAINING_CHANGE_PCT}%: new workflows only pay off if people adopt them"},
+        {"component": "Contingency", "amount_m": round(contingency, 1),
+         "basis": f"{CONTINGENCY_PCT}%: modernization quotes historically understate by 30-45%"},
+    ]
+    return {
+        "total_m": round(total, 1),
+        "low_m": round(total * (1 - ESTIMATE_RANGE_PCT / 100.0), 1),
+        "high_m": round(total * (1 + ESTIMATE_RANGE_PCT / 100.0), 1),
+        "breakdown": breakdown,
+    }
+
+
 @dataclass
 class LegacyInputs:
     maintenance_cost_m: float
@@ -182,9 +262,15 @@ def run_diagnostic(inputs: LegacyInputs) -> dict:
     security_flag = ("monolith" in inputs.api_maturity.lower()
                      or "siloed" in inputs.architecture.lower())
 
-    # 3. Modern alternatives — rebuild vs status quo
-    rebuild_cost = inputs.rebuild_cost_m if inputs.rebuild_cost_m is not None \
-        else (inputs.maintenance_cost_m * 3.5)
+    # 3. Modern alternatives — bottom-up rebuild estimate vs status quo
+    if inputs.rebuild_cost_m is not None:
+        rebuild_cost = inputs.rebuild_cost_m
+        rebuild_estimate = None
+    else:
+        rebuild_estimate = estimate_rebuild_cost(
+            inputs.maintenance_cost_m, inputs.silo_count,
+            inputs.architecture, inputs.api_maturity, gov_score)
+        rebuild_cost = rebuild_estimate["total_m"]
     legacy_annual_savings = inputs.maintenance_cost_m * 0.65
     funding = calculate_funding_metrics(rebuild_cost, legacy_annual_savings, inputs.unlocked_anv_m)
 
@@ -238,6 +324,7 @@ def run_diagnostic(inputs: LegacyInputs) -> dict:
             "payback_months": round(funding["self_funding_horizon_months"])
                 if funding["self_funding_horizon_months"] != float("inf") else None,
         },
+        "rebuild_estimate": rebuild_estimate,
     }
 
 

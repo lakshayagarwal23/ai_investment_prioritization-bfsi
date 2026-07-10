@@ -90,6 +90,43 @@ def _budget_donut(pos: dict) -> go.Figure:
     return fig
 
 
+def _breakeven_chart(sf: dict) -> go.Figure:
+    """Cumulative cashflow of the modernization: starts at -capex, climbs by
+    the monthly value, crosses zero at the self-funding horizon."""
+    capex = sf["rebuild_cost_m"]
+    monthly = sf["total_annual_value_m"] / 12.0
+    horizon = int(max(48, (sf["payback_months"] or 48) + 18))
+    months = list(range(0, horizon + 1))
+    cum = [round(-capex + monthly * m, 1) for m in months]
+    pb = sf["payback_months"]
+
+    fig = go.Figure()
+    fig.add_hline(y=0, line_color="#DEDEDE", line_width=1)
+    fig.add_trace(go.Scatter(
+        x=months, y=cum, mode="lines", line=dict(color="#D04A02", width=2),
+        hovertemplate="Month %{x}: %{y:$.1f}M cumulative<extra></extra>",
+        showlegend=False,
+    ))
+    if pb:
+        fig.add_trace(go.Scatter(
+            x=[pb], y=[0], mode="markers",
+            marker=dict(size=10, color="#D04A02", line=dict(color="white", width=2)),
+            hovertemplate=f"Breaks even at month {pb}<extra></extra>", showlegend=False))
+        fig.add_annotation(x=pb, y=0, text=f"Breaks even: month {pb}",
+                           showarrow=True, arrowhead=0, arrowcolor="#7D7D7D",
+                           ax=0, ay=-36, font=dict(size=12, color="#464646", family="Arial"))
+    fig.update_layout(
+        height=260, margin=dict(l=40, r=20, t=24, b=36),
+        plot_bgcolor="white", paper_bgcolor="white",
+        xaxis=dict(title=dict(text="Months after funding", font=dict(size=12, color="#7D7D7D")),
+                   showgrid=False, zeroline=False, tickfont=dict(size=11, color="#7D7D7D")),
+        yaxis=dict(title=dict(text="Cumulative cashflow ($M)", font=dict(size=12, color="#7D7D7D")),
+                   showgrid=False, zeroline=False, tickfont=dict(size=11, color="#7D7D7D")),
+        font=dict(family="Arial"),
+    )
+    return fig
+
+
 def render_foundation_decision() -> None:
     answers = st.session_state.get("discovery_answers", {})
 
@@ -154,8 +191,13 @@ def render_foundation_decision() -> None:
     """)
 
     # ── 1. Cost vs value ─────────────────────────────────────────────────────
-    st.html('<div class="hz-report-h2">1. What the estate costs vs. what it delivers</div>')
     ratio = tco["ratio_pct"]
+    if ratio is not None:
+        st.html(f'<div class="hz-report-h2">1. Keeping the estate alive consumes {ratio}% '
+                f'of the value it delivers</div>')
+    else:
+        st.html('<div class="hz-report-h2">1. The estate has running costs but no stated '
+                'business value</div>')
     ratio_txt = f"{ratio}%" if ratio is not None else "not computable (no stated value)"
     band_cls = {"healthy": "hz-status-ok", "watch": "hz-status-watch",
                 "critical": "hz-status-breach", "value-negative": "hz-status-breach"}[tco["band"]]
@@ -186,11 +228,16 @@ def render_foundation_decision() -> None:
     """)
 
     # ── 2. The score, arithmetic shown ───────────────────────────────────────
-    st.html('<div class="hz-report-h2">2. How we scored it</div>')
-    st.html(f'<div style="{_BODY} margin-bottom:12px;">Three factors, weighted. '
-            'Each shows the exact inputs behind it. Nothing else feeds the score.</div>')
     pe = res["pillar_explain"]
     gov_gap = 100 - pillars["governance_readiness"]
+    contributions = {"technical debt": 0.40 * pillars["tech_debt_score"],
+                     "data fragmentation": 0.35 * pillars["fragmentation_score"],
+                     "the governance gap": 0.25 * gov_gap}
+    main_driver = max(contributions, key=contributions.get)
+    st.html(f'<div class="hz-report-h2">2. The score is {res["deprecation_score"]}/100, '
+            f'driven mainly by {main_driver}</div>')
+    st.html(f'<div style="{_BODY} margin-bottom:12px;">Three factors, weighted. '
+            'Each shows the exact inputs behind it. Nothing else feeds the score.</div>')
 
     def meter(label, score, explain):
         return f"""
@@ -226,13 +273,22 @@ def render_foundation_decision() -> None:
     """)
 
     # ── 3. The business case for funding ─────────────────────────────────────
-    st.html('<div class="hz-report-h2">3. What funding modernization would do</div>')
+    est = res.get("rebuild_estimate")
     pb = f"{sf['payback_months']} months" if sf["payback_months"] else "does not pay back on current numbers"
+    if sf["payback_months"]:
+        st.html(f'<div class="hz-report-h2">3. A ${sf["rebuild_cost_m"]}M modernization '
+                f'would break even in about {sf["payback_months"]} months</div>')
+    else:
+        st.html(f'<div class="hz-report-h2">3. A ${sf["rebuild_cost_m"]}M modernization '
+                f'does not pay for itself on current numbers</div>')
+    cost_cell = (f"${est['low_m']}M to ${est['high_m']}M" if est else f"${sf['rebuild_cost_m']}M")
+    cost_note = ("Built bottom-up from your architecture, silo count and data quality. "
+                 "Full breakdown below" if est else "Client-provided figure")
     st.html(f"""
     <table class="hz-table-wrap">
       <tbody>
-        <tr><td>One-off modernization cost</td><td class="num">${sf['rebuild_cost_m']}M</td>
-            <td style="{_CAPTION}">Estimated at 3.5x your annual maintenance, a standard planning heuristic. Refined during scoping</td></tr>
+        <tr><td>One-off modernization cost</td><td class="num">{cost_cell}</td>
+            <td style="{_CAPTION}">{cost_note}</td></tr>
         <tr><td>Maintenance you stop paying</td><td class="num">${sf['legacy_annual_savings_m']}M per year</td>
             <td style="{_CAPTION}">65% of today's maintenance ends; 35% carries over to run the new platform</td></tr>
         <tr><td>AI value currently blocked</td><td class="num">${sf['unlocked_anv_m']}M per year</td>
@@ -241,10 +297,34 @@ def render_foundation_decision() -> None:
             <td class="num"><strong>${sf['total_annual_value_m']}M per year</strong></td><td></td></tr>
         <tr style="border-top:2px solid var(--g300);"><td><strong>Pays for itself in</strong></td>
             <td class="num"><strong>{pb}</strong></td>
-            <td style="{_CAPTION}">One-off cost divided by the monthly value above</td></tr>
+            <td style="{_CAPTION}">Mid-point cost divided by the monthly value above</td></tr>
       </tbody>
     </table>
     """)
+
+    if est:
+        with st.expander("How the modernization estimate is built, line by line"):
+            rows = "".join(
+                f'<tr><td>{html.escape(c["component"])}</td>'
+                f'<td class="num">${c["amount_m"]}M</td>'
+                f'<td style="{_CAPTION}">{html.escape(c["basis"])}</td></tr>'
+                for c in est["breakdown"])
+            st.html(f"""
+            <table class="hz-table-wrap">
+              <thead><tr><th>Component</th><th style="text-align:right;">Estimate</th><th>What drives it</th></tr></thead>
+              <tbody>{rows}
+                <tr style="border-top:2px solid var(--g300);"><td><strong>Total (mid-point)</strong></td>
+                    <td class="num"><strong>${est['total_m']}M</strong></td>
+                    <td style="{_CAPTION}">Presented as ±20% because pre-scoping estimates carry real uncertainty</td></tr>
+              </tbody>
+            </table>
+            <div style="{_CAPTION}">Change your answers on architecture, silo count or governance and every line
+            recomputes. During a real engagement each component is replaced by scoped vendor quotes.</div>
+            """)
+
+    if sf["payback_months"]:
+        st.plotly_chart(_breakeven_chart(sf), use_container_width=True,
+                        config={"displayModeBar": False})
     if blocked:
         rows = "".join(f'<div class="hz-road-item">{html.escape(p["name"])} · '
                        f'${p["anv_m"]:.1f}M per year, currently parked</div>' for p in blocked)
@@ -254,8 +334,10 @@ def render_foundation_decision() -> None:
                 'so this decision is purely about cost and risk, not about unlocking AI value.</div>')
 
     # ── 4. Budget position (current plan) ────────────────────────────────────
-    st.html('<div class="hz-report-h2">4. Where your budget stands</div>')
     pos = _budget_position()
+    committed = pos["levers_m"] + pos["modern_m"]
+    st.html(f'<div class="hz-report-h2">4. ${committed:.1f}M of your ${pos["budget_m"]:.0f}M '
+            f'budget is committed in the current plan</div>')
     col_chart, col_table = st.columns([1, 1.2])
     with col_chart:
         st.plotly_chart(_budget_donut(pos), use_container_width=True,
@@ -280,7 +362,7 @@ def render_foundation_decision() -> None:
         """)
 
     # ── 5. The decision ──────────────────────────────────────────────────────
-    st.html('<div class="hz-report-h2">5. Your decision</div>')
+    st.html('<div class="hz-report-h2">5. Your decision: does modernization go into the plan?</div>')
     st.html(f'<div style="{_BODY} margin-bottom:12px;">One question: does legacy modernization '
             'go into your investment plan? Your choice reshapes The Recommendation and '
             'The Portfolio tabs, and you can change it at any time.</div>')

@@ -212,7 +212,15 @@ def _roadmap(plan):
 
 # ── Act 2: The Portfolio ──────────────────────────────────────────────────────
 def _tab_portfolio(plan: list[dict]) -> None:
-    st.html('<div class="hz-report-h2">AI Use Case Prioritization Matrix</div>')
+    n_funded = sum(1 for p in plan if p.get("budget_approved"))
+    blocked_m = sum(p["anv"] for p in plan
+                    if p["quadrant"] == "Park (Data-Blocked)" and p["anv"] > 0) / 1e6
+    if blocked_m > 0.05:
+        headline = (f"{n_funded} use cases are worth funding now; "
+                    f"${blocked_m:.1f}M per year sits blocked behind the data foundation")
+    else:
+        headline = f"{n_funded} of {len(plan)} use cases earn a place in the funded plan"
+    st.html(f'<div class="hz-report-h2">{headline}</div>')
     st.html('<p class="hz-p" style="font-size:13px; color:var(--g700);">'
             'Each circle is one AI use case, positioned by how much it is worth to you (vertical) '
             'and how ready your firm is to deliver it (horizontal). Bigger circles carry more annual value. '

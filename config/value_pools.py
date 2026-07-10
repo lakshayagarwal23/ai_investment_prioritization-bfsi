@@ -288,8 +288,16 @@ CONSTANTS = {
     "New_Business_Margin_Pct": 25,
     "Insurance_Customer_Margin_USD_Yr": 45,
     "MF_Folio_Margin_USD_Yr": 30,
-    # Legacy / foundation
-    "Rebuild_Capex_Multiplier": 3.5,
+    # Legacy / foundation: bottom-up rebuild model (engine/legacy_diagnostic.py)
+    "Rebuild_Core_Complexity_Monolith_x": 2.2,
+    "Rebuild_Core_Complexity_OnPrem_x": 1.7,
+    "Rebuild_Core_Complexity_Modern_x": 1.2,
+    "Rebuild_Migration_Cost_per_Silo_USD_M": 0.35,
+    "Rebuild_Integration_Cost_per_Silo_USD_M": 0.15,
+    "Rebuild_Testing_ParallelRun_Pct": 15,
+    "Rebuild_Training_Change_Pct": 8,
+    "Rebuild_Contingency_Pct": 15,
+    "Rebuild_Estimate_Range_Pct": 20,
     "Legacy_Savings_Retention_Rate": 0.65,
     # Realization
     "Year_1_Ramp_Curve_Pct": 25,
