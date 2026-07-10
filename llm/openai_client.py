@@ -4,11 +4,12 @@ llm/openai_client.py — Premium HTML-rich Strategic Investment Memo (Powered by
 from __future__ import annotations
 import os
 from google import genai
-from google.genai import types
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 def generate_executive_summary(company: str, plan: list[dict], answers: dict, sector: str = "Financial Services") -> str:
+    import html as _html
+    company_raw = company or "the firm"
+    company = _html.escape(company_raw)  # memo is rendered as HTML — never trust the name
     # 1. Gather data
     strategic_bets = [p for p in plan if p["quadrant"] == "Strategic Bets"]
     quick_wins     = [p for p in plan if p["quadrant"] == "Quick Wins / Fill-ins"]
@@ -111,6 +112,3 @@ def generate_executive_summary(company: str, plan: list[dict], answers: dict, se
 </p>
 """
     return memo
-
-def generate_company_intelligence(company: str) -> dict:
-    return {"summary": f"Diagnostic for {company}.", "geographies": ["Global"], "tailored_options": {}}

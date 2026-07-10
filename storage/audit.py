@@ -18,7 +18,7 @@ import sqlite3
 import uuid
 from pathlib import Path
 
-ENGINE_VERSION = "4.0.0"   # bump on any formula change
+ENGINE_VERSION = "5.1.0"   # bump on any formula change
 CORPUS_VERSION = "0.1.0-unverified"  # bump when corpus entries are verified
 
 DB_PATH = Path(__file__).parent.parent / "audit.db"

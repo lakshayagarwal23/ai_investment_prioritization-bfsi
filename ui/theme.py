@@ -18,16 +18,18 @@ def inject_theme() -> None:
 
 def render_header(firm_name: str = "The Firm", sector: str = "BFSI", run_id: str = "") -> None:
     """Render the branded top header bar with firm context pinned."""
-    run_id_html = f"<span>{run_id}</span>" if run_id else ""
+    import html as _html
+    from storage.audit import ENGINE_VERSION
+    run_id_html = f"<span>{_html.escape(run_id)}</span>" if run_id else ""
     html = f"""
     <div class="hz-header">
         <div class="hz-header-left">
             <span class="hz-header-title">AI Investment Prioritisation</span>
-            <span class="hz-header-sub">{firm_name} &nbsp;·&nbsp; {sector}</span>
+            <span class="hz-header-sub">{_html.escape(firm_name)} &nbsp;·&nbsp; {_html.escape(sector)}</span>
         </div>
         <div class="hz-header-right">
             {run_id_html}
-            <span>ENG: 5.0.0</span>
+            <span>ENG: {ENGINE_VERSION}</span>
         </div>
     </div>
     """

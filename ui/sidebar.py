@@ -82,8 +82,10 @@ def render_intake_wizard() -> None:
 # ── Page 0: Company ─────────────────────────────────────────────────────────
 
 def _page_company() -> None:
-    st.html("""
-    <div class="hz-q-group-intro">Firm Profile (Step 1 of 7)</div>
+    if st.session_state.pop("_company_error", False):
+        st.error("Please select your firm (or enter a custom name) to continue.")
+    st.html(f"""
+    <div class="hz-q-group-intro">Firm Profile (Step 1 of {len(STEPPER_LABELS)})</div>
     <div style="font-size:14px; color:var(--g700); margin-bottom:var(--sp-6);">
         Select your firm to pre-load benchmark peer intelligence, or enter custom details.
         Data is used solely to calibrate the diagnostic engine.
@@ -121,6 +123,10 @@ def _advance_company(sel, custom, goals, sector):
     company = custom if sel == "Other / Confidential" else sel
     if company == "— Select your firm —":
         company = ""
+    company = company.strip()
+    if not company:
+        st.session_state._company_error = True
+        st.rerun()
     st.session_state.company_name = company
     st.session_state.primary_goals = goals
     st.session_state.target_sector = sector
@@ -160,7 +166,7 @@ def _page_section(idx: int) -> None:
     title, desc = _SECTION_DESCS.get(sid, (section["title"], ""))
 
     st.html(f"""
-    <div class="hz-q-group-intro">{title} (Step {idx+2} of 7)</div>
+    <div class="hz-q-group-intro">{title} (Step {idx+3} of {len(STEPPER_LABELS)})</div>
     <div style="font-size:14px; color:var(--g700); margin-bottom:var(--sp-6);">{desc}</div>
     """)
 
@@ -171,7 +177,7 @@ def _page_section(idx: int) -> None:
             st.html(f"""
             <div style="background:var(--yellow-tint); border:1px solid var(--pwc-yellow); padding:12px 16px; border-radius:2px; margin-bottom:24px; color:var(--black); font-size:13px;">
                 <strong>{len(filled)} field(s) pre-filled for {safe}.</strong>
-                Each carries a source chip below — please verify before continuing.
+                Each carries a source chip below. Please verify before continuing.
             </div>
             """)
 
@@ -229,7 +235,7 @@ def _render_card_question(idx: int, q: dict, answers: dict) -> None:
         src = html.escape(str(prov.get("source_url", "public source")))
         help_text = f"Source: {src}<br><em>\"{quote}\"</em>"
     elif q.get("provenance") == "AUTO":
-        chip_class, chip_text = "median", "NOT FOUND — using default"
+        chip_class, chip_text = "median", "NOT FOUND, USING DEFAULT"
     elif current == q.get("default"):
         chip_class, chip_text = "median", "MEDIAN"
 
@@ -258,8 +264,8 @@ def _render_card_question(idx: int, q: dict, answers: dict) -> None:
 # ── Final page: budget ──────────────────────────────────────────────────────
 
 def _page_investment() -> None:
-    st.html("""
-    <div class="hz-q-group-intro">Total AI Transformation Budget (Step 7 of 7)</div>
+    st.html(f"""
+    <div class="hz-q-group-intro">Total AI Transformation Budget (Step {len(STEPPER_LABELS)} of {len(STEPPER_LABELS)})</div>
     <div style="font-size:14px; color:var(--g700); margin-bottom:var(--sp-6);">
         The capital envelope. The engine sequences levers to stay within budget while maximising
         risk-adjusted ANV. Peer range for mid-tier BFSI: $25M – $150M.
@@ -321,3 +327,4 @@ def _nav_buttons(back_fn, next_label: str, next_fn) -> None:
     with col_next:
         if st.button(next_label, key=f"next_{st.session_state.wizard_page}", type="primary", use_container_width=True):
             next_fn()
+            st.rerun()  # render the new page immediately — never leave a stale frame

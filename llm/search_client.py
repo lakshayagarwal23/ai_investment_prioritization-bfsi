@@ -129,12 +129,15 @@ def extract_company_data(company_name: str) -> dict:
         research_notes = _tier1_grounded_research(company_name, api_key, log)
         if research_notes:
             result = _structured_extract(company_name, research_notes, api_key, log)
-    if not result:
-        # Tier 2 fallback: per-field ddgs queries -> extraction (needs a key
-        # for extraction; without any key we return {} and the UI stays manual)
-        snippets = _tier2_ddgs_research(company_name, log)
-        if snippets and api_key:
-            result = _structured_extract(company_name, snippets, api_key, log)
+        if not result:
+            # Tier 2 fallback: per-field ddgs queries -> structured extraction
+            snippets = _tier2_ddgs_research(company_name, log)
+            if snippets:
+                result = _structured_extract(company_name, snippets, api_key, log)
+    else:
+        # No key -> extraction is impossible; do NOT waste the user's time on
+        # searches whose results can never be parsed. UI stays fully manual.
+        log["backend"] = "no retrieval (GEMINI_API_KEY missing)"
 
     # Finalise the log
     for fid in FIELD_SPECS:

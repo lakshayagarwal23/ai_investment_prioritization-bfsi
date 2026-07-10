@@ -27,12 +27,8 @@ def get_questions_for_section(section_id: str, sector: str = "all") -> list[dict
 
 OTHER_OPTION = "Other (type below)"
 
-OBJECTIVE_INPUTS = [
-    "Margin Expansion (Cost Reduction)",
-    "Alpha Generation (Revenue Growth)",
-    "Regulatory Resilience (Risk Management)",
-    "Client Coverage Scaling",
-]
+# Single source of truth: the goal strings levers align to in value_pools.py.
+from config.value_pools import GOALS as OBJECTIVE_INPUTS
 
 QUESTIONS = [
     # ─── S1: Technology & Data Infrastructure ─────────────────────────────────
@@ -114,7 +110,7 @@ QUESTIONS = [
         "question": "How many policy applications do you process annually?",
         "type": "numeric",
         "help": "This sets the baseline to calculate potential savings from automated underwriting.",
-        "default": 50000.0,
+        "default": 250000.0,
         "provenance": "AUTO",
         "visible_when": {"sector": ["Life & General Insurance", "Diversified Financial Services"]},
     },
@@ -146,7 +142,7 @@ QUESTIONS = [
         "question": "How many full-time employees handle manual back-office tasks?",
         "type": "numeric",
         "help": "This number is used to estimate the direct cost savings AI could achieve in operations.",
-        "default": 50.0,
+        "default": 400.0,
         "provenance": "MANUAL",
         "sectors": ["all"]
     },
@@ -156,7 +152,7 @@ QUESTIONS = [
         "question": "How many insurance claims do you process annually?",
         "type": "numeric",
         "help": "This helps us calculate the financial impact of automating claims and detecting fraud.",
-        "default": 100000.0,
+        "default": 500000.0,
         "provenance": "AUTO",
         "visible_when": {"sector": ["Life & General Insurance", "Diversified Financial Services"]},
     },
@@ -207,8 +203,8 @@ QUESTIONS = [
     {
         "id": "S5_GOVERNANCE_SCORE",
         "section": "S5",
-        "question": "How would you rate your organization's data governance maturity (1-100)?",
-        "type": "numeric",
+        "question": "How would you rate your organization's data governance maturity (0-100)?",
+        "type": "percentage",
         "help": "A low score means data quality issues could block advanced AI projects until resolved.",
         "default": 50,
         "provenance": "MANUAL",

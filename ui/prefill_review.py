@@ -30,7 +30,7 @@ def render_prefill_review() -> None:
     <div class="hz-q-group-intro">Review pre-filled data (Step 2 of 8)</div>
     <div style="font-size:14px; color:var(--g700); margin-bottom:var(--sp-4);">
         We searched public sources for <strong>{company}</strong>. Confirm or correct
-        what was found — nothing below is estimated; every value carries its source.
+        what was found. Nothing below is estimated; every value carries its source.
     </div>
     """)
 
@@ -54,7 +54,7 @@ def render_prefill_review() -> None:
     # ── Found fields: value + source + keep/discard ─────────────────────────
     st.html(f'<div class="hz-report-h2">Found from public sources ({len(found)})</div>')
     if not found:
-        st.html('<p class="hz-p" style="color:var(--g500);">Nothing could be verified from public sources for this firm. All fields will be entered manually or use peer medians — clearly chipped as such.</p>')
+        st.html('<p class="hz-p" style="color:var(--g500);">Nothing could be verified from public sources for this firm. All fields will be entered manually or use peer medians, clearly chipped as such.</p>')
     answers = st.session_state.discovery_answers
     for fid, p in found.items():
         q = _Q_BY_ID[fid]
@@ -81,9 +81,9 @@ def render_prefill_review() -> None:
     if missing:
         st.html(f'<div class="hz-report-h2">Not found in public sources ({len(missing)})</div>')
         items = "".join(
-            f'<div class="hz-road-item">{html.escape(_Q_BY_ID[f]["question"])} — '
-            f'<span style="color:var(--g500);">you will enter this in the next steps'
-            f'{" (internal metric — rarely public)" if f in ("S1_ARCH","S1_ERP") else ""}</span></div>'
+            f'<div class="hz-road-item">{html.escape(_Q_BY_ID[f]["question"])} '
+            f'<span style="color:var(--g500);">You will enter this in the next steps'
+            f'{" (internal metric, rarely public)" if f in ("S1_ARCH","S1_ERP") else ""}</span></div>'
             for f in missing)
         st.html(items)
 

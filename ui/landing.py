@@ -29,34 +29,31 @@ _HERO_BANNER_HTML = """
         <div class="hz-hero-card">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333333; padding-bottom: 12px; margin-bottom: 16px;">
                 <span style="font-size: 10px; font-weight: bold; color: var(--g300); text-transform: uppercase; letter-spacing: 0.05em;">● AI Investment Prioritisation</span>
-                <span style="background: #2a1e17; color: var(--pwc-orange); border: 1px solid var(--pwc-orange); font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 2px;">GENERATED</span>
+                <span style="background: #2a1e17; color: var(--pwc-orange); border: 1px solid var(--pwc-orange); font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 2px;">WHAT YOU GET</span>
             </div>
             <div style="display: flex; gap: var(--sp-2); margin-bottom: 16px;">
                 <div class="hz-hero-mini-card">
-                    <div style="font-size: 16px; font-weight: bold; color: #FFFFFF;">185%</div>
-                    <div style="font-size: 8px; color: var(--g300); text-transform: uppercase;">Portfolio ROI</div>
+                    <div style="font-size: 16px; font-weight: bold; color: #FFFFFF;">14</div>
+                    <div style="font-size: 8px; color: var(--g300); text-transform: uppercase;">Value Levers</div>
                 </div>
                 <div class="hz-hero-mini-card">
-                    <div style="font-size: 16px; font-weight: bold; color: #FFFFFF;">21mo</div>
-                    <div style="font-size: 8px; color: var(--g300); text-transform: uppercase;">Payback</div>
+                    <div style="font-size: 16px; font-weight: bold; color: #FFFFFF;">3</div>
+                    <div style="font-size: 8px; color: var(--g300); text-transform: uppercase;">Scenarios</div>
                 </div>
                 <div class="hz-hero-mini-card">
-                    <div style="font-size: 16px; font-weight: bold; color: #FFFFFF;">&plusmn;20%</div>
-                    <div style="font-size: 8px; color: var(--g300); text-transform: uppercase;">Confidence</div>
+                    <div style="font-size: 16px; font-weight: bold; color: #FFFFFF;">100%</div>
+                    <div style="font-size: 8px; color: var(--g300); text-transform: uppercase;">Auditable Math</div>
                 </div>
             </div>
-            <div style="font-size: 10px; color: var(--g300); text-transform: uppercase; margin-bottom: 8px; font-weight: bold;">Top Value Levers</div>
+            <div style="font-size: 10px; color: var(--g300); text-transform: uppercase; margin-bottom: 8px; font-weight: bold;">Board-Ready Outputs</div>
             <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 6px;">
-                <span style="color: #FFFFFF;">● Agentic Trade Reconciliation</span>
-                <span style="font-family: monospace; color: var(--g300);">$14.5M</span>
+                <span style="color: #FFFFFF;">● Budget-constrained prioritisation matrix</span>
             </div>
             <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 6px;">
-                <span style="color: #FFFFFF;">● Data Platform Golden Source</span>
-                <span style="font-family: monospace; color: var(--g300);">$30.0M</span>
+                <span style="color: #FFFFFF;">● Legacy kill / modernize / hold verdict</span>
             </div>
             <div style="display: flex; justify-content: space-between; font-size: 11px;">
-                <span style="color: #FFFFFF;">● Underwriting Automation (MAUDE)</span>
-                <span style="font-family: monospace; color: var(--g300);">$10.5M</span>
+                <span style="color: #FFFFFF;">● IRDAI / RBI / SEBI compliance overlay</span>
             </div>
         </div>
     </div>
@@ -89,7 +86,7 @@ _CAPABILITIES_HTML = """
 
 <div style="margin-top: 48px; border-top: 1px solid var(--g200); padding-top: 16px; display: flex; justify-content: space-between; align-items: center;">
     <span style="font-family: var(--font-head); font-size: 24px; color: var(--pwc-orange); font-weight: bold;">pwc</span>
-    <span style="font-size: 11px; color: var(--g500);">Powered by Gemini 2.5 Flash &middot; 14 BFSI Value Pools &middot; v5.0.0</span>
+    <span style="font-size: 11px; color: var(--g500);">Powered by Gemini 2.5 Flash &middot; 14 BFSI Value Pools &middot; v5.1.0</span>
 </div>
 """
 
