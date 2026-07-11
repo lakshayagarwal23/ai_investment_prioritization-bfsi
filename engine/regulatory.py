@@ -99,24 +99,23 @@ def check_regulatory_compliance(lever_id: str, answers: dict) -> dict:
 
     compliant, non_compliant, mitigations = [], [], []
     for c in active:
-        failed = False
-        # Weak governance cannot evidence the audit trail regulators demand
+        # Red is reserved for a genuine blocker: governance too weak to
+        # evidence the audit trail a regulator will demand. Anything else
+        # is at most a yellow with a named mitigation.
         if c.audit_requirement and governance < 35:
-            failed = True
-        # Cloud estates must evidence in-region residency for localization rules
-        if c.name == "Data Localization" and "cloud-native" in arch and governance < 60:
-            failed = True
-        if failed:
             non_compliant.append(c)
             mitigations.append(c.mitigation)
         else:
             compliant.append(c)
 
+    residency_watch = "cloud-native" in arch and governance < 60
     if non_compliant:
         risk_level = "red"
-    elif governance < 60:
+    elif governance < 60 or residency_watch:
         risk_level = "yellow"
         mitigations = [c.mitigation for c in active if c.impact_on_automation >= 0.3]
+        if residency_watch:
+            mitigations.append("Evidence in-region data residency for the cloud estate before go-live")
     else:
         risk_level = "green"
 

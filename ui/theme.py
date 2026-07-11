@@ -321,6 +321,57 @@ button[kind="secondary"]:hover {
     margin-bottom: var(--sp-6);
 }
 
+/* Decision card: the one answer the first tab exists to give */
+.hz-decision-card {
+    background: var(--paper);
+    border: 1px solid var(--g200);
+    border-top: 4px solid var(--pwc-orange);
+    border-radius: var(--radius-card);
+    padding: var(--sp-8);
+    margin-bottom: var(--sp-6);
+    box-shadow: 0 2px 10px rgba(45,45,45,0.05);
+}
+.hz-decision-eyebrow {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--pwc-orange); margin-bottom: var(--sp-3);
+}
+.hz-decision-headline {
+    font-family: var(--font-head); font-size: 32px; color: var(--black);
+    line-height: 1.2; margin-bottom: var(--sp-3);
+}
+.hz-decision-sub {
+    font-size: 14px; color: var(--g700); line-height: 1.6;
+    max-width: 720px; margin-bottom: var(--sp-6);
+}
+.hz-decision-row { display: flex; gap: var(--sp-8); flex-wrap: wrap; }
+.hz-decision-block { flex: 1; min-width: 220px; }
+.hz-decision-lbl {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--g500); margin-bottom: var(--sp-2);
+}
+.hz-driver-chip {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 13px; color: var(--black); background: var(--orange-tint);
+    border-left: 3px solid var(--pwc-orange); border-radius: var(--radius);
+    padding: 8px 12px; margin-bottom: 6px;
+}
+.hz-driver-val { font-variant-numeric: tabular-nums; color: var(--g700); font-size: 12.5px; }
+.hz-risk-chip {
+    display: block; font-size: 13px; color: var(--g700); background: var(--g100);
+    border-left: 3px solid var(--g300); border-radius: var(--radius);
+    padding: 8px 12px; margin-bottom: 6px;
+}
+
+/* Ask cards (the three asks) */
+.hz-ask-card {
+    flex: 1; border: 1px solid var(--g200); border-top: 4px solid var(--g300);
+    padding: var(--sp-4); border-radius: var(--radius-card);
+    transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.hz-ask-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(45,45,45,0.08); }
+.hz-ask-title { font-family: var(--font-head); font-size: 16px; color: var(--black); margin-bottom: 8px; }
+.hz-ask-desc { font-size: 13px; color: var(--g700); line-height: 1.5; }
+
 /* KPI Tiles */
 .hz-kpi-row { display: flex; gap: var(--sp-4); margin-bottom: var(--sp-6); }
 .hz-kpi-tile {

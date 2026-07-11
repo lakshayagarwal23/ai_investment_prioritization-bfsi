@@ -90,43 +90,6 @@ def _budget_donut(pos: dict) -> go.Figure:
     return fig
 
 
-def _breakeven_chart(sf: dict) -> go.Figure:
-    """Cumulative cashflow of the modernization: starts at -capex, climbs by
-    the monthly value, crosses zero at the self-funding horizon."""
-    capex = sf["rebuild_cost_m"]
-    monthly = sf["total_annual_value_m"] / 12.0
-    horizon = int(max(48, (sf["payback_months"] or 48) + 18))
-    months = list(range(0, horizon + 1))
-    cum = [round(-capex + monthly * m, 1) for m in months]
-    pb = sf["payback_months"]
-
-    fig = go.Figure()
-    fig.add_hline(y=0, line_color="#DEDEDE", line_width=1)
-    fig.add_trace(go.Scatter(
-        x=months, y=cum, mode="lines", line=dict(color="#D04A02", width=2),
-        hovertemplate="Month %{x}: %{y:$.1f}M cumulative<extra></extra>",
-        showlegend=False,
-    ))
-    if pb:
-        fig.add_trace(go.Scatter(
-            x=[pb], y=[0], mode="markers",
-            marker=dict(size=10, color="#D04A02", line=dict(color="white", width=2)),
-            hovertemplate=f"Breaks even at month {pb}<extra></extra>", showlegend=False))
-        fig.add_annotation(x=pb, y=0, text=f"Breaks even: month {pb}",
-                           showarrow=True, arrowhead=0, arrowcolor="#7D7D7D",
-                           ax=0, ay=-36, font=dict(size=12, color="#464646", family="Arial"))
-    fig.update_layout(
-        height=260, margin=dict(l=40, r=20, t=24, b=36),
-        plot_bgcolor="white", paper_bgcolor="white",
-        xaxis=dict(title=dict(text="Months after funding", font=dict(size=12, color="#7D7D7D")),
-                   showgrid=False, zeroline=False, tickfont=dict(size=11, color="#7D7D7D")),
-        yaxis=dict(title=dict(text="Cumulative cashflow ($M)", font=dict(size=12, color="#7D7D7D")),
-                   showgrid=False, zeroline=False, tickfont=dict(size=11, color="#7D7D7D")),
-        font=dict(family="Arial"),
-    )
-    return fig
-
-
 def render_foundation_decision() -> None:
     answers = st.session_state.get("discovery_answers", {})
 
@@ -322,9 +285,6 @@ def render_foundation_decision() -> None:
             recomputes. During a real engagement each component is replaced by scoped vendor quotes.</div>
             """)
 
-    if sf["payback_months"]:
-        st.plotly_chart(_breakeven_chart(sf), use_container_width=True,
-                        config={"displayModeBar": False})
     if blocked:
         rows = "".join(f'<div class="hz-road-item">{html.escape(p["name"])} · '
                        f'${p["anv_m"]:.1f}M per year, currently parked</div>' for p in blocked)
@@ -371,19 +331,20 @@ def render_foundation_decision() -> None:
             f'<tr><td>{html.escape(p["name"])}</td>'
             f'<td class="num">${p["impl_cost"]/1e6:.1f}M</td>'
             f'<td class="num">${p["anv_m"]:.1f}M / yr</td>'
-            f'<td class="num">{p["payback"]:.0f} mo</td></tr>'
+            f'<td style="{_CAPTION}">{html.escape(p.get("cost_basis", ""))}</td></tr>'
             for p in sorted(funded_levers, key=lambda x: -x["impl_cost"]))
         st.html(f"""
         <table class="hz-table-wrap">
           <thead><tr><th>Use case</th><th style="text-align:right;">Build cost</th>
-          <th style="text-align:right;">Annual value</th><th style="text-align:right;">Payback</th></tr></thead>
+          <th style="text-align:right;">Annual value</th><th>What the cost covers</th></tr></thead>
           <tbody>{rows}
             <tr style="border-top:2px solid var(--g300);"><td><strong>Total committed to AI use cases</strong></td>
                 <td class="num"><strong>${pos['levers_m']:.1f}M</strong></td><td></td><td></td></tr>
           </tbody>
         </table>
-        <div style="{_CAPTION}">Each build cost is that use case's implementation estimate from the
-        lever library; the full scorecard with impact and readiness is on The Portfolio tab.</div>
+        <div style="{_CAPTION}">Build costs are delivery-benchmark scopes for a firm of your size,
+        replaced by scoped vendor quotes during an engagement. The full scorecard with each use
+        case's value and readiness is on the portfolio tab.</div>
         """)
     if pos["modern_m"] > 0 and est:
         with st.expander(f"What makes up the ${pos['modern_m']:.1f}M committed to modernization"):

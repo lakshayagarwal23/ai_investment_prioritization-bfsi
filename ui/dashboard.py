@@ -23,9 +23,10 @@ def render_dashboard() -> None:
     answers = st.session_state.discovery_answers or {}
     company = html.escape(st.session_state.company_name) if st.session_state.company_name else "The Firm"
 
+    # Each tab answers exactly one executive question.
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "The Recommendation", "The Portfolio", "The Foundation",
-        "Risks & Compliance", "Appendix",
+        "What should we fund?", "Which use cases, and why?", "Can our systems support it?",
+        "What could stop us?", "How was this computed?",
     ])
     with tab1:
         _tab_recommendation(plan, answers, company)
@@ -109,84 +110,105 @@ def _scenario_bar() -> None:
             st.session_state.show_restart_confirm = False
             st.rerun()
 
-# ── Act 1: The Recommendation ────────────────────────────────────────────────
+# ── Tab 1: What should we fund? (one question, one answer, one action) ───────
 def _tab_recommendation(plan, answers, company):
     approved = [p for p in plan if p.get("budget_approved")]
     total_anv = sum(p["anv"] for p in approved) / 1e6
     total_cost = sum(p["impl_cost"] for p in approved) / 1e6
     exec_risk = compute_execution_risk(answers)
     risk_adj = total_anv * (1.0 - exec_risk)
-    # Payback on the risk-adjusted cashflow — consistent with the hero tile
+    confidence = int(round((1.0 - exec_risk) * 100))
     pb = payback_months(total_cost * 1e6, risk_adj * 1e6)
-    pb_str = f"{pb:.0f}" if pb < 900 else "n/a"
-
+    pb_str = f"{pb:.0f} months" if pb < 900 else "beyond the horizon"
     budget_m = float(st.session_state.get("budget_usd_m", 100.0))
+
+    drivers = sorted(approved, key=lambda p: -p["anv"])[:3]
+    driver_html = "".join(
+        f'<span class="hz-driver-chip">{html.escape(p.get("short_name") or p["name"])}'
+        f'<span class="hz-driver-val">${p["anv_m"]:.1f}M/yr</span></span>'
+        for p in drivers)
+
+    risks = []
+    if "monolith" in str(answers.get("S1_ERP", "")).lower():
+        risks.append("Legacy core system")
+    if float(answers.get("S1_SILO", 5) or 5) >= 5:
+        risks.append("Fragmented data estate")
+    if float(answers.get("S5_GOVERNANCE_SCORE", 50) or 50) < 60:
+        risks.append("Governance maturity")
+    if any(p["reg_status"].get("risk_level") == "yellow" for p in approved):
+        risks.append("Compliance mitigations required")
+    risks = risks[:3] or ["No structural risks flagged"]
+    risk_html = "".join(f'<span class="hz-risk-chip">{html.escape(r)}</span>' for r in risks)
+
     st.html(f"""
-    <div style="font-family: var(--font-head); font-size: 22px; color: var(--g900); margin-bottom: 16px; line-height: 1.4;">
-        Based on {company}'s operational footprint, we recommend a focused AI investment program prioritizing your strategic goals. A ${total_cost:.1f}M commitment will unlock ${risk_adj:.1f}M in risk-adjusted annual net value, paying for itself in {pb_str} months.
-    </div>
-    <div style="font-size:13px; color:var(--g500); margin-bottom: 32px;">
-        Budget position: ${total_cost:.1f}M committed of your ${budget_m:.0f}M envelope,
-        ${max(0.0, budget_m - total_cost):.1f}M held uncommitted. The full breakdown is on The Foundation tab, section 4.
+    <div class="hz-decision-card">
+        <div class="hz-decision-eyebrow">Recommendation for {company}</div>
+        <div class="hz-decision-headline">Invest ${total_cost:.1f}M of your ${budget_m:.0f}M budget now.</div>
+        <div class="hz-decision-sub">
+            The funded plan creates <strong>${risk_adj:.1f}M of value per year</strong> after a
+            {exec_risk*100:.0f}% risk discount, and earns back its cost in <strong>{pb_str}</strong>.
+            The remaining ${max(0.0, budget_m - total_cost):.1f}M stays uncommitted, because
+            spending it on weaker cases would destroy value.
+        </div>
+        <div class="hz-decision-row">
+            <div class="hz-decision-block">
+                <div class="hz-decision-lbl">Largest value drivers</div>{driver_html}
+            </div>
+            <div class="hz-decision-block">
+                <div class="hz-decision-lbl">What could get in the way</div>{risk_html}
+            </div>
+            <div class="hz-decision-block" style="min-width:150px;">
+                <div class="hz-decision-lbl">Plan confidence</div>
+                <div style="font-family:var(--font-head); font-size:30px; color:var(--black);">{confidence}%</div>
+                <div style="font-size:11px; color:var(--g500);">driven by your governance maturity</div>
+            </div>
+        </div>
     </div>
     """)
 
-    _render_kpi_header(plan, answers, company)
-    
-    st.html('<div class="hz-report-h2" style="margin-top: 32px;">Executive Asks</div>')
+    with st.expander("How these headline numbers are built"):
+        st.html(f"""
+        <table class="hz-table-wrap">
+          <tbody>
+            <tr><td>Value created per year (before risk discount)</td><td class="num">${total_anv:.1f}M</td>
+                <td style="font-size:12px; color:var(--g500);">Sum of every funded use case's annual value; each one is itemized on the next tab</td></tr>
+            <tr><td>Risk discount</td><td class="num">{exec_risk*100:.0f}%</td>
+                <td style="font-size:12px; color:var(--g500);">From your governance maturity score: weaker governance means more delivery slippage</td></tr>
+            <tr style="background:var(--g100);"><td><strong>Value created per year (after discount)</strong></td>
+                <td class="num"><strong>${risk_adj:.1f}M</strong></td><td></td></tr>
+            <tr><td>Money in</td><td class="num">${total_cost:.1f}M</td>
+                <td style="font-size:12px; color:var(--g500);">Every dollar itemized on the systems tab, section 4</td></tr>
+            <tr style="border-top:2px solid var(--g300);"><td><strong>Earns back its cost in</strong></td>
+                <td class="num"><strong>{pb_str}</strong></td>
+                <td style="font-size:12px; color:var(--g500);">Value ramps over 3 years (25% / 60% / 100%), so early months earn less</td></tr>
+          </tbody>
+        </table>
+        """)
+
     now = [p for p in approved if p["quadrant"] == "Strategic Bets"]
     nxt = [p for p in approved if p["quadrant"] == "Quick Wins / Fill-ins"]
     now_capex = sum(p["impl_cost"] for p in now) / 1e6
     nxt_capex = sum(p["impl_cost"] for p in nxt) / 1e6
-    
-    # 3 Decision Asks
+
+    st.html('<div class="hz-report-h2" style="margin-top: 32px;">The three asks of your leadership team</div>')
     st.html(f'''
     <div style="display:flex; gap:16px; margin-bottom: 32px;">
-      <div style="flex:1; border:1px solid #E0E0E0; border-top: 4px solid #D04A02; padding: 16px; border-radius: 4px;">
-        <div style="font-family: var(--font-head); font-size: 16px; margin-bottom: 8px;">1. Fund Now (0-6 mo)</div>
-        <div style="font-size: 14px; color: var(--g700);">Commit ${now_capex:.1f}M to Strategic Bets</div>
+      <div class="hz-ask-card" style="border-top-color:#D04A02;">
+        <div class="hz-ask-title">1. Fund now (0 to 6 months)</div>
+        <div class="hz-ask-desc">Commit ${now_capex:.1f}M to the {len(now)} highest-value, ready-to-build use cases</div>
       </div>
-      <div style="flex:1; border:1px solid #E0E0E0; border-top: 4px solid #EB8C00; padding: 16px; border-radius: 4px;">
-        <div style="font-family: var(--font-head); font-size: 16px; margin-bottom: 8px;">2. Fund Next (6-18 mo)</div>
-        <div style="font-size: 14px; color: var(--g700);">Approve ${nxt_capex:.1f}M for Quick Wins</div>
+      <div class="hz-ask-card" style="border-top-color:#EB8C00;">
+        <div class="hz-ask-title">2. Fund next (6 to 18 months)</div>
+        <div class="hz-ask-desc">Approve ${nxt_capex:.1f}M for {len(nxt)} fast, momentum-building use cases</div>
       </div>
-      <div style="flex:1; border:1px solid #E0E0E0; border-top: 4px solid #7D7D7D; padding: 16px; border-radius: 4px;">
-        <div style="font-family: var(--font-head); font-size: 16px; margin-bottom: 8px;">3. Change Management</div>
-        <div style="font-size: 14px; color: var(--g700);">Align business units to adopt new processes</div>
+      <div class="hz-ask-card" style="border-top-color:#7D7D7D;">
+        <div class="hz-ask-title">3. Sponsor the change</div>
+        <div class="hz-ask-desc">Name business owners for each use case; value lands only if teams adopt the new way of working</div>
       </div>
     </div>
     ''')
-    
+
     _roadmap(plan)
-
-
-def _render_kpi_header(plan, answers, company):
-    approved = [p for p in plan if p.get("budget_approved")]
-    total_anv = sum(p["anv"] for p in approved) / 1e6
-    total_cost = sum(p["impl_cost"] for p in approved) / 1e6
-    exec_risk = compute_execution_risk(answers)
-    risk_adj = total_anv * (1.0 - exec_risk)
-    pb = payback_months(total_cost * 1e6, risk_adj * 1e6)
-    bets = sum(1 for p in approved if p["quadrant"] == "Strategic Bets")
-    quick = sum(1 for p in approved if p["quadrant"] == "Quick Wins / Fill-ins")
-    pb_str = f"{pb:.0f}mo" if pb < 900 else "n/a"
-
-    st.html(f"""
-    <div class="hz-kpi-row">
-        <div class="hz-kpi-tile hz-kpi-hero">
-            <div class="hz-kpi-lbl">Risk-Adjusted Annual Net Value</div>
-            <div class="hz-kpi-num">${risk_adj:.1f}M</div>
-            <div style="font-size:11px; color:var(--pwc-orange); border-top:1px solid var(--pwc-orange); margin-top:8px; padding-top:4px;">
-                Raw ANV: ${total_anv:.1f}M · exec risk {exec_risk*100:.0f}%
-            </div>
-        </div>
-        <div class="hz-kpi-tile"><div class="hz-kpi-lbl">Strategic Bets (funded)</div><div class="hz-kpi-num">{bets}</div></div>
-        <div class="hz-kpi-tile"><div class="hz-kpi-lbl">Quick Wins (funded)</div><div class="hz-kpi-num">{quick}</div></div>
-        <div class="hz-kpi-tile"><div class="hz-kpi-lbl">Portfolio Payback</div><div class="hz-kpi-num">{pb_str}</div></div>
-    </div>
-    """)
-
-
 
 
 def _roadmap(plan):
@@ -197,16 +219,18 @@ def _roadmap(plan):
 
     def col(items, cls, head, subtitle):
         if items:
-            body = "".join(f'<div class="hz-road-item">{html.escape(p["name"])} · ${p["anv_m"]:.1f}M</div>' for p in items[:5])
+            body = "".join(f'<div class="hz-road-item">{html.escape(p["name"])} · ${p["anv_m"]:.1f}M/yr</div>'
+                           for p in items)
         else:
             body = '<div class="hz-road-empty">None in this horizon.</div>'
-        return f'<div class="hz-road-col {cls}"><div class="hz-road-h">{head}</div><div style="font-size:11px;color:var(--g500);margin-bottom:8px;">{subtitle}</div>{body}</div>'
+        return (f'<div class="hz-road-col {cls}"><div class="hz-road-h">{head}</div>'
+                f'<div style="font-size:11px;color:var(--g500);margin-bottom:8px;">{subtitle}</div>{body}</div>')
 
-    st.html('<div class="hz-report-h2" style="margin-top: 32px;">Phased Roadmap</div>')
+    st.html('<div class="hz-report-h2" style="margin-top: 32px;">The sequence</div>')
     st.html('<div class="hz-roadmap">'
-            + col(now, "now", "Now (0–6 mo)", "High impact, ready to build")
-            + col(nxt, "next", "Next (6–18 mo)", "Fast, momentum-building")
-            + col(later, "later", "Later (data-blocked)", "High value, fix the foundation first")
+            + col(now, "now", "Now (0-6 mo)", "High value, ready to build")
+            + col(nxt, "next", "Next (6-18 mo)", "Fast, momentum-building")
+            + col(later, "later", "Later (blocked)", "High value, needs the data foundation first")
             + '</div>')
 
 
@@ -378,39 +402,55 @@ def _tab_portfolio(plan: list[dict]) -> None:
         mime='text/csv',
     )
 
+    quadrant_display = {
+        "Strategic Bets": "Strategic bet",
+        "Quick Wins / Fill-ins": "Quick win",
+        "Park (Data-Blocked)": "Blocked",
+        "De-prioritize": "Lower priority",
+    }
+    st.html("""
+    <div style="display:flex; gap:20px; font-size:12px; color:var(--g500); margin-bottom:8px; flex-wrap:wrap;">
+        <span><strong style="color:var(--g700);">Strategic bet</strong> · high value and ready to build; fund first</span>
+        <span><strong style="color:var(--g700);">Quick win</strong> · smaller value, fast to deliver; builds momentum</span>
+        <span><strong style="color:var(--g700);">Blocked</strong> · valuable but your data foundation cannot support it yet</span>
+        <span><strong style="color:var(--g700);">Lower priority</strong> · does not earn a place in this plan</span>
+    </div>
+    """)
+
     rows = ""
     for p in plan:
         funded = p.get("budget_approved", False)
         tr_cls = "" if funded else "unfunded"
-        tag = "" if funded else '<span class="hz-chip median" style="margin-left:8px;">UNFUNDED</span>'
+        tag = "" if funded else '<span class="hz-chip median" style="margin-left:8px;">NOT FUNDED</span>'
         warn = ""
         if p.get("warning") == "COMPUTE_ERROR":
-            val, pb, roi = "n/a", "n/a", "n/a"
-            warn = '<span class="hz-status-breach" style="font-size:11px; margin-left:8px;">△ could not be computed</span>'
+            val, pb = "n/a", "n/a"
+            warn = '<span class="hz-status-breach" style="font-size:11px; margin-left:8px;">could not be computed</span>'
         elif p["anv_m"] < 0:
             val = f"<span class='hz-status-breach'>${p['anv_m']:.1f}M</span>"
-            pb, roi = "n/a (negative value)", "n/a"
-            warn = '<span class="hz-status-breach" style="font-size:11px; margin-left:8px;">△ value-destructive</span>'
+            pb = "n/a (loses money)"
+            warn = '<span class="hz-status-breach" style="font-size:11px; margin-left:8px;">loses money at current inputs</span>'
         else:
             val = f"${p['anv_m']:.1f}M"
             pb = f"{p['payback']:.0f} mo" if p["payback"] < 900 else "n/a"
-            roi = f"{p['roi']:.0f}%"
             if p.get("warning") == "REG_CAPPED":
-                warn = '<span class="hz-status-watch" style="font-size:11px; margin-left:8px;">△ automation capped pending compliance mitigations</span>'
+                warn = ('<span class="hz-status-watch" style="font-size:11px; margin-left:8px;">'
+                        'value halved until compliance gaps close</span>')
 
         dot_color = brand_color if (p["quadrant"] not in ["Park (Data-Blocked)", "De-prioritize"]) else grey_color
         q_dot = f'<span style="display:inline-block; width:10px; height:10px; border-radius:50%; background-color:{dot_color}; margin-right:8px;"></span>'
 
         rows += (f'<tr class="{tr_cls}"><td><strong>{html.escape(p["name"])}</strong>{warn}{tag}</td>'
-                 f'<td>{p["priority"]}</td><td>{q_dot}{p["quadrant"]}</td>'
-                 f'<td class="num">{val}</td><td class="num">{pb}</td><td class="num">{roi}</td>'
+                 f'<td>{q_dot}{quadrant_display.get(p["quadrant"], p["quadrant"])}</td>'
+                 f'<td class="num">${p["impl_cost"]/1e6:.1f}M</td>'
+                 f'<td class="num">{val}</td><td class="num">{pb}</td>'
                  f'<td class="num">{p["impact"]}/100</td><td class="num">{p["feasibility"]}/100</td></tr>')
     st.html(f"""
     <table class="hz-table-wrap"><thead><tr>
-        <th>AI Use Case</th><th>Priority</th><th>Quadrant</th>
-        <th style="text-align:right;">ANV / yr</th><th style="text-align:right;">Payback</th>
-        <th style="text-align:right;">Risk-adj ROI</th>
-        <th style="text-align:right;">Impact</th><th style="text-align:right;">Feasibility</th>
+        <th>AI use case</th><th>Category</th>
+        <th style="text-align:right;">Build cost</th>
+        <th style="text-align:right;">Annual value</th><th style="text-align:right;">Earns it back in</th>
+        <th style="text-align:right;">Value score</th><th style="text-align:right;">Readiness</th>
     </tr></thead><tbody>{rows}</tbody></table>
     """)
 

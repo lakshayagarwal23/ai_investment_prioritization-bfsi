@@ -40,7 +40,30 @@ GOAL_COST, GOAL_REVENUE, GOAL_RISK, GOAL_COVERAGE = GOALS
 
 # Levers that cannot ship until the data foundation is modernized.
 # Single definition — imported by the engine and both UI modules.
-PLATFORM_GATED_LEVERS = {"lever_2", "lever_7", "lever_8", "lever_11", "lever_13"}
+# lever_9 (Golden Source) IS foundation work, so funding the foundation
+# unblocks it by definition.
+PLATFORM_GATED_LEVERS = {"lever_2", "lever_7", "lever_8", "lever_9", "lever_11", "lever_13"}
+
+# What each build cost covers — shown wherever a cost is itemized so no
+# dollar figure appears without a stated basis. Delivery-benchmark scopes
+# for a mid-size BFSI firm; replaced by scoped vendor quotes in engagement.
+COST_BASIS = {
+    "lever_1":  "Recon platform licence, custodian-feed integration, ~6-month build and tuning team",
+    "lever_2":  "Order-routing engine licence, broker connectivity, SEBI algo registration and testing",
+    "lever_3":  "Document-AI pipeline, research data licences, analyst workflow integration",
+    "lever_4":  "CRM intelligence layer, admin-task automation, sales enablement rollout",
+    "lever_5":  "KYC/AML decisioning platform, registry integrations, model validation",
+    "lever_6":  "Reg-reporting automation suite, rule library setup, parallel-run validation",
+    "lever_7":  "NAV oversight tooling, fund-accounting system integration",
+    "lever_8":  "Personalisation engine, statement generation, channel integration",
+    "lever_9":  "Golden-source data layer build, entity resolution, source-system onboarding",
+    "lever_10": "Document-extraction models, corporate-actions workflow integration",
+    "lever_11": "Underwriting decision engine, medical-data integrations, actuarial validation",
+    "lever_12": "Claims triage and fraud models, core-system integration, adjuster workflow",
+    "lever_13": "Customer data platform licence, identity resolution, campaign integration",
+    "lever_14": "Digital onboarding journeys, biometric KYC integration, distributor rollout",
+    "lever_0_foundation": "Bottom-up modernization estimate; six-component breakdown on The Foundation tab",
+}
 
 SECTOR_MF = "Mutual Funds / Asset Management"
 SECTOR_INS = "Life & General Insurance"

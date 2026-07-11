@@ -19,7 +19,8 @@ DESIGN CONTRACT
 """
 
 from __future__ import annotations
-from config.value_pools import BFSI_LEVERS, CONSTANTS, GOALS, PLATFORM_GATED_LEVERS
+from config.value_pools import (BFSI_LEVERS, CONSTANTS, GOALS,
+                                PLATFORM_GATED_LEVERS, COST_BASIS)
 from engine.regulatory import check_regulatory_compliance
 
 # ── Loaded costs and derivation multipliers (auditable in the Appendix) ──────
@@ -501,6 +502,7 @@ def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0,
             "goal_weight": goal_alignment,
             "warning":     warning_flag,
             "reg_status":  reg_status,
+            "cost_basis":  COST_BASIS.get(lid, ""),
             "budget_approved": False,
         })
 
@@ -561,6 +563,7 @@ def _foundation_lever(answers: dict) -> dict:
         "goal_weight": 5,
         "warning":     None,
         "reg_status":  check_regulatory_compliance("lever_9", answers),
+        "cost_basis":  COST_BASIS["lever_0_foundation"],
         "budget_approved": False,
     }
 
