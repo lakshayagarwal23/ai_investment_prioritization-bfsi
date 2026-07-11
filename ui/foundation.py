@@ -36,6 +36,7 @@ def _apply_decision(fund: bool) -> None:
         primary_goals=st.session_state.primary_goals,
         scenario=st.session_state.get("current_scenario", "base"),
         foundation_decision=fund,
+        ai_stack=st.session_state.get("ai_stack", "Balanced"),
     )
     st.session_state.foundation_flash = "funded" if fund else "deferred"
     st.rerun()
@@ -102,6 +103,7 @@ def render_foundation_decision() -> None:
         primary_goals=st.session_state.get("primary_goals", []),
         scenario=st.session_state.get("current_scenario", "base"),
         foundation_decision=False,
+        ai_stack=st.session_state.get("ai_stack", "Balanced"),
     )
     blocked = [p for p in baseline
                if p["id"] in PLATFORM_GATED_LEVERS

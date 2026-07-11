@@ -234,6 +234,41 @@ def test_diagnostic_verdicts_move_with_inputs():
         assert "—" not in text, "em dashes are banned from report copy"
 
 
+# ── Cost controls: company size and AI-stack choice ──────────────────────────
+
+def test_build_costs_scale_with_company_size():
+    """A $200B/1500-FTE firm must pay more per build than a $10B/100-FTE firm,
+    within the declared clamp band."""
+    small = {p["id"]: p["impl_cost"] for p in
+             build_investment_plan(mf_answers(S1_AUM=10.0, S3_TOTAL_OPS_FTE=100.0), 100.0, [])}
+    large = {p["id"]: p["impl_cost"] for p in
+             build_investment_plan(mf_answers(S1_AUM=200.0, S3_TOTAL_OPS_FTE=1500.0), 100.0, [])}
+    for lid in small:
+        assert large[lid] > small[lid]
+        assert large[lid] / small[lid] <= (1.5 / 0.7) + 0.01, "size scaling escaped its clamp"
+
+
+def test_size_multiplier_is_documented_in_cost_basis():
+    plan = build_investment_plan(mf_answers(S1_AUM=200.0, S3_TOTAL_OPS_FTE=1500.0), 100.0, [])
+    assert all("scaled x" in p["cost_basis"] for p in plan if p["id"] != "lever_0_foundation")
+    plan_median = build_investment_plan(mf_answers(), 100.0, [])
+    assert all("scaled x" not in p["cost_basis"] for p in plan_median), \
+        "median firm should not show a scaling note"
+
+
+def test_ai_stack_moves_run_costs():
+    """Frontier models cost more to run; open-source-led costs less. Value
+    must order accordingly, lever by lever."""
+    frontier = {p["id"]: p["anv"] for p in
+                build_investment_plan(mf_answers(), 100.0, [], ai_stack="Frontier")}
+    balanced = {p["id"]: p["anv"] for p in
+                build_investment_plan(mf_answers(), 100.0, [], ai_stack="Balanced")}
+    cheap = {p["id"]: p["anv"] for p in
+             build_investment_plan(mf_answers(), 100.0, [], ai_stack="Cost-optimized")}
+    for lid in balanced:
+        assert frontier[lid] < balanced[lid] < cheap[lid]
+
+
 # ── Bottom-up rebuild cost model ──────────────────────────────────────────────
 
 def test_rebuild_estimate_is_bottom_up_and_sums():

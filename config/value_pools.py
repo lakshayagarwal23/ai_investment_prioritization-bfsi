@@ -283,6 +283,23 @@ BFSI_LEVERS = [
     },
 ]
 
+# Annual run cost embedded in each lever's value formula (model licences,
+# inference/API spend, platform hosting). Declared here so the AI-stack
+# choice can adjust them transparently: a frontier-model stack (premium
+# hosted models) runs ~30% dearer; an open-source-led stack ~25% cheaper.
+RUN_COSTS = {
+    "lever_1": 250_000, "lever_2": 600_000, "lever_3": 400_000,
+    "lever_4": 500_000, "lever_5": 350_000, "lever_6": 300_000,
+    "lever_7": 400_000, "lever_8": 600_000, "lever_9": 300_000,
+    "lever_10": 200_000, "lever_11": 400_000, "lever_12": 400_000,
+    "lever_13": 600_000, "lever_14": 400_000,
+}
+AI_STACKS = {
+    "Frontier": 1.30,        # premium hosted models (highest capability)
+    "Balanced": 1.00,        # mix of hosted and self-managed (default)
+    "Cost-optimized": 0.75,  # open-source-led, self-hosted where possible
+}
+
 # ── Auditable model constants (surfaced in the Assumptions Appendix) ─────────
 # Loaded FTE costs are India-blended, fully loaded (salary + benefits +
 # overhead + vendor allocation), in USD/year.
@@ -340,4 +357,12 @@ CONSTANTS = {
     "Impact_ValuePool_Cap": 1.6,    # a firm 60%+ above peer-median saturates the pool score
     # Regulatory: a red (non-compliant) lever has its automation benefit capped
     "Reg_NonCompliant_Automation_Cap_Pct": 50,
+    # Build costs scale with firm size: sqrt(AUM ratio x ops-headcount ratio)
+    # vs the peer-median firm ($50B AUM, 400 ops FTE), clamped to this band.
+    "Cost_Scale_Floor_x": 0.7,
+    "Cost_Scale_Cap_x": 1.5,
+    # AI stack run-cost multipliers (see AI_STACKS above)
+    "AI_Stack_Frontier_x": 1.30,
+    "AI_Stack_Balanced_x": 1.00,
+    "AI_Stack_CostOptimized_x": 0.75,
 }

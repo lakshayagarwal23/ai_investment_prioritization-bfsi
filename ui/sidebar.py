@@ -43,7 +43,7 @@ def init_session_state() -> None:
         "primary_goals": ["Margin Expansion (Cost Reduction)"],
         "discovery_answers": {}, "discovery_provenance": {},
         "target_sector": "Mutual Funds / Asset Management",
-        "current_scenario": "base",
+        "current_scenario": "base", "ai_stack": "Balanced",
         "thesis_generated": False, "thesis_plan": None, "thesis_summary": "",
     }
     for k, v in defaults.items():
@@ -289,7 +289,8 @@ def _generate(budget):
         from engine.math_engine import build_investment_plan
         plan = build_investment_plan(
             st.session_state.discovery_answers, st.session_state.budget_usd_m,
-            st.session_state.primary_goals, scenario=st.session_state.get("current_scenario", "base"))
+            st.session_state.primary_goals, scenario=st.session_state.get("current_scenario", "base"),
+            ai_stack=st.session_state.get("ai_stack", "Balanced"))
         st.session_state.thesis_plan = plan
         
         st.write("Generating executive memo...")

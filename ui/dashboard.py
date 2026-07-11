@@ -71,30 +71,50 @@ def _foundation_flash() -> None:
 
 # ── Inline scenario toggle (replaces the sidebar radio) ─────────────────────
 
+def _recompute_plan() -> None:
+    from engine.math_engine import build_investment_plan
+    st.session_state.thesis_plan = build_investment_plan(
+        st.session_state.discovery_answers, st.session_state.budget_usd_m,
+        st.session_state.primary_goals,
+        scenario=st.session_state.get("current_scenario", "base"),
+        foundation_decision=st.session_state.get("foundation_decision", False),
+        ai_stack=st.session_state.get("ai_stack", "Balanced"))
+
+
 def _scenario_bar() -> None:
     decision = st.session_state.get("foundation_decision")
     status = {True: ('var(--pwc-orange)', 'Legacy modernization: in the plan'),
               False: ('var(--g500)', 'Legacy modernization: not in the plan'),
               None: ('var(--g500)', 'Legacy modernization: decision pending on The Foundation tab')}[decision]
     st.html(f'<div class="hz-scenario-lbl" style="display:flex; justify-content:space-between;">'
-            f'<span>Execution scenario</span>'
+            f'<span>Execution scenario &nbsp;·&nbsp; AI model stack</span>'
             f'<span style="color:{status[0]}; font-size:11px; font-weight:600;">{status[1]}</span></div>')
-    c1, c2, c3, _ = st.columns([2, 2, 2, 4])
+    c1, c2, c3, gap, s1, s2, s3 = st.columns([1.5, 1.5, 1.5, 0.6, 1.5, 1.5, 1.8])
+
     current = st.session_state.get("current_scenario", "base")
     labels = {"conservative": "Conservative", "base": "Base", "aggressive": "Aggressive"}
-    cols = {"conservative": c1, "base": c2, "aggressive": c3}
-    for key, col in cols.items():
+    for key, col in {"conservative": c1, "base": c2, "aggressive": c3}.items():
         with col:
-            is_active = current == key
             if st.button(labels[key], key=f"sc_{key}", use_container_width=True,
-                         type="primary" if is_active else "secondary"):
+                         type="primary" if current == key else "secondary",
+                         help="How much of the modelled value we bank: 50% / 60% / 75%"):
                 if key != current:
                     st.session_state.current_scenario = key
-                    from engine.math_engine import build_investment_plan
-                    st.session_state.thesis_plan = build_investment_plan(
-                        st.session_state.discovery_answers, st.session_state.budget_usd_m,
-                        st.session_state.primary_goals, scenario=key,
-                        foundation_decision=st.session_state.get("foundation_decision", False))
+                    _recompute_plan()
+                    st.rerun()
+
+    stack = st.session_state.get("ai_stack", "Balanced")
+    stack_help = {"Frontier": "Premium hosted models: highest capability, ~30% higher run costs",
+                  "Balanced": "Mix of hosted and self-managed models (default)",
+                  "Cost-optimized": "Open-source-led, self-hosted where possible: ~25% lower run costs"}
+    for key, col in {"Frontier": s1, "Balanced": s2, "Cost-optimized": s3}.items():
+        with col:
+            if st.button(key, key=f"stk_{key}", use_container_width=True,
+                         type="primary" if stack == key else "secondary",
+                         help=stack_help[key]):
+                if key != stack:
+                    st.session_state.ai_stack = key
+                    _recompute_plan()
                     st.rerun()
     if st.button("↺ Restart analysis", key="restart", type="secondary"):
         st.session_state.show_restart_confirm = True

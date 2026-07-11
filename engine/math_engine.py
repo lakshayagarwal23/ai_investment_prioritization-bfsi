@@ -20,7 +20,8 @@ DESIGN CONTRACT
 
 from __future__ import annotations
 from config.value_pools import (BFSI_LEVERS, CONSTANTS, GOALS,
-                                PLATFORM_GATED_LEVERS, COST_BASIS)
+                                PLATFORM_GATED_LEVERS, COST_BASIS,
+                                RUN_COSTS, AI_STACKS)
 from engine.regulatory import check_regulatory_compliance
 
 # ── Loaded costs and derivation multipliers (auditable in the Appendix) ──────
@@ -340,6 +341,19 @@ def lever_14_digital_onboarding(a: dict, scenario: str = "base") -> float:
 # GOVERNANCE / EXECUTION RISK
 # ─────────────────────────────────────────────────────────────────────────────
 
+def compute_size_multiplier(a: dict) -> float:
+    """Build costs scale with firm size: integration surface, environments,
+    stakeholders and testing all grow with scale. Geometric mean of the AUM
+    and ops-headcount ratios vs the peer-median firm, clamped so an outlier
+    answer cannot distort costs more than +/-50%."""
+    aum_ratio = max(0.1, _f(a, "S1_AUM", 50.0) / 50.0)
+    ops_ratio = max(0.1, _f(a, "S3_TOTAL_OPS_FTE", 400.0) / 400.0)
+    mult = (aum_ratio * ops_ratio) ** 0.5
+    floor = CONSTANTS["Cost_Scale_Floor_x"]
+    cap = CONSTANTS["Cost_Scale_Cap_x"]
+    return round(max(floor, min(cap, mult)), 2)
+
+
 def compute_governance_readiness(a: dict) -> float:
     return max(0.0, min(100.0, _f(a, "S5_GOVERNANCE_SCORE", 50.0)))
 
@@ -419,7 +433,8 @@ def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0,
                               primary_goals: list[str] = None,
                               llm_intel: dict | None = None,
                               scenario: str = "base",
-                              foundation_decision: bool = False) -> list[dict]:
+                              foundation_decision: bool = False,
+                              ai_stack: str = "Balanced") -> list[dict]:
     """Score all sector-applicable levers, rank by goal alignment then value,
     and allocate the budget greedily to positive-value levers."""
     if primary_goals is None:
@@ -432,6 +447,8 @@ def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0,
 
     haircuts = {"conservative": 0.50, "base": 0.60, "aggressive": 0.75}
     haircut = haircuts.get(scenario, 0.60)
+    size_mult = compute_size_multiplier(answers)
+    stack_mult = AI_STACKS.get(ai_stack, 1.0)
 
     scored = []
     for lever in feasible_levers:
@@ -441,7 +458,11 @@ def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0,
         warning_flag = None
         if compute_fn:
             try:
-                anv = compute_fn(answers, scenario=scenario) * haircut
+                raw = compute_fn(answers, scenario=scenario)
+                # Lever formulas embed the Balanced-stack run cost; adjust it
+                # for the chosen AI stack (frontier dearer, open-source cheaper)
+                raw += RUN_COSTS.get(lid, 0.0) * (1.0 - stack_mult)
+                anv = raw * haircut
             except Exception:
                 # Surface the failure — never rank a broken lever as a $0 result
                 anv = 0.0
@@ -460,7 +481,8 @@ def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0,
         if anv < 0 and warning_flag is None:
             warning_flag = "VALUE_DESTRUCTIVE"
 
-        impl_cost = lever.get("impl_cost_estimate", 1_000_000)
+        # Build cost scales with firm size (integration surface grows with scale)
+        impl_cost = lever.get("impl_cost_estimate", 1_000_000) * size_mult
         payback = payback_months(impl_cost, anv)
         roi = risk_adjusted_roi(impl_cost, anv, exec_risk)
 
@@ -502,7 +524,9 @@ def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0,
             "goal_weight": goal_alignment,
             "warning":     warning_flag,
             "reg_status":  reg_status,
-            "cost_basis":  COST_BASIS.get(lid, ""),
+            "cost_basis":  COST_BASIS.get(lid, "") + (
+                f". Scoped for a peer-median firm, scaled x{size_mult:.2f} for your size "
+                f"(assets and ops headcount)" if size_mult != 1.0 else ""),
             "budget_approved": False,
         })
 

@@ -17,19 +17,24 @@ def inject_theme() -> None:
     st.html(_THEME_CSS)
 
 def render_header(firm_name: str = "The Firm", sector: str = "BFSI", run_id: str = "") -> None:
-    """Render the branded top header bar with firm context pinned."""
+    """Premium dark header: logomark, product wordmark, engagement breadcrumb,
+    and context chips on the right."""
     import html as _html
     from storage.audit import ENGINE_VERSION
-    run_id_html = f"<span>{_html.escape(run_id)}</span>" if run_id else ""
+    run_chip = f'<span class="hz-header-chip">{_html.escape(run_id)}</span>' if run_id else ""
     html = f"""
     <div class="hz-header">
         <div class="hz-header-left">
-            <span class="hz-header-title">AI Investment Prioritisation</span>
-            <span class="hz-header-sub">{_html.escape(firm_name)} &nbsp;·&nbsp; {_html.escape(sector)}</span>
+            <div class="hz-logo-mark">AI</div>
+            <span class="hz-header-title">Investment Engine</span>
+            <span class="hz-header-sep"></span>
+            <span class="hz-header-crumb">{_html.escape(firm_name)}
+                <span class="hz-header-crumb-dim">/ {_html.escape(sector)}</span></span>
         </div>
         <div class="hz-header-right">
-            {run_id_html}
-            <span>ENG: {ENGINE_VERSION}</span>
+            {run_chip}
+            <span class="hz-header-chip">ENGINE {ENGINE_VERSION}</span>
+            <span class="hz-header-chip hz-header-chip-brand">PwC Horizon</span>
         </div>
     </div>
     """
@@ -37,6 +42,8 @@ def render_header(firm_name: str = "The Firm", sector: str = "BFSI", run_id: str
 
 _THEME_CSS = """
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 /* ══════════════════════════════════════════════════════════════════════════
    PWC HORIZON DESIGN TOKENS
    ══════════════════════════════════════════════════════════════════════════ */
@@ -79,7 +86,7 @@ _THEME_CSS = """
 
     /* Type */
     --font-head: Georgia, 'Times New Roman', serif;
-    --font-body: Arial, Helvetica, sans-serif;
+    --font-body: 'Inter', -apple-system, 'Segoe UI', Arial, sans-serif;
     
     /* Spacing */
     --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
@@ -97,11 +104,51 @@ input, textarea, button, select,
     color: var(--g700) !important;
 }
 
+html, body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
 h1, h2, h3, h4, h5, h6, .hz-georgia {
     font-family: var(--font-head) !important;
     color: var(--black) !important;
     font-weight: normal !important;
 }
+
+/* Tabs: quiet, editorial, with a single accent underline */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 6px;
+    border-bottom: 1px solid var(--g200);
+    margin-bottom: var(--sp-4);
+}
+.stTabs [data-baseweb="tab"] {
+    font-family: var(--font-body) !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    color: var(--g500) !important;
+    padding: 10px 14px !important;
+    background: transparent !important;
+}
+.stTabs [data-baseweb="tab"]:hover { color: var(--black) !important; }
+.stTabs [aria-selected="true"] { color: var(--black) !important; }
+.stTabs [data-baseweb="tab-highlight"] { background-color: var(--pwc-orange) !important; height: 2px !important; }
+.stTabs [data-baseweb="tab-border"] { display: none !important; }
+
+/* Expanders: card-like, quiet until opened */
+[data-testid="stExpander"] {
+    border: 1px solid var(--g200) !important;
+    border-radius: var(--radius-card) !important;
+    background: var(--paper) !important;
+    margin-bottom: var(--sp-3);
+}
+[data-testid="stExpander"] summary {
+    font-family: var(--font-body) !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    color: var(--g700) !important;
+}
+[data-testid="stExpander"] summary:hover { color: var(--pwc-orange) !important; }
 
 /* Streamlit overrides */
 .stApp { background-color: var(--paper); }
@@ -201,18 +248,40 @@ button[kind="secondary"]:hover {
     position: fixed;
     top: 0; left: 0; right: 0;
     height: 60px;
-    background: #111111;
-    border-bottom: 2px solid var(--pwc-orange);
+    background: #0A0A0A;
+    border-bottom: 1px solid #1F1F1F;
+    box-shadow: 0 1px 0 rgba(208,74,2,0.35), 0 4px 20px rgba(0,0,0,0.35);
     z-index: 1000000;
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 0 var(--sp-6);
 }
-.hz-header-left { display: flex; align-items: center; gap: var(--sp-4); }
-.hz-header-title { font-family: var(--font-head); font-size: 19px; color: #FFFFFF; font-weight: bold; }
-.hz-header-sub { font-family: var(--font-body); font-size: 11px; color: var(--g300); text-transform: uppercase; letter-spacing: 0.05em; }
-.hz-header-right { display: flex; gap: var(--sp-4); font-family: monospace; font-size: 11px; color: var(--g300); }
+.hz-header-left { display: flex; align-items: center; gap: var(--sp-3); }
+.hz-logo-mark {
+    width: 28px; height: 28px; border-radius: 7px;
+    background: linear-gradient(135deg, var(--pwc-orange), var(--pwc-tangerine));
+    color: #FFFFFF; font-family: var(--font-body); font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    letter-spacing: -0.02em;
+}
+.hz-header-title {
+    font-family: var(--font-body); font-size: 14.5px; font-weight: 600;
+    color: #FFFFFF; letter-spacing: -0.01em;
+}
+.hz-header-sep { width: 1px; height: 20px; background: #2A2A2A; margin: 0 var(--sp-2); }
+.hz-header-crumb { font-family: var(--font-body); font-size: 13px; color: #D6D6D6; font-weight: 500; }
+.hz-header-crumb-dim { color: #6E6E6E; font-weight: 400; margin-left: 4px; }
+.hz-header-right { display: flex; gap: var(--sp-2); align-items: center; }
+.hz-header-chip {
+    font-family: var(--font-body); font-size: 10.5px; font-weight: 600;
+    color: #B5B5B5; background: #161616; border: 1px solid #2A2A2A;
+    border-radius: 999px; padding: 4px 11px; letter-spacing: 0.03em;
+    text-transform: uppercase;
+    transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.hz-header-chip:hover { border-color: #3E3E3E; color: #E0E0E0; }
+.hz-header-chip-brand { color: var(--pwc-tangerine); border-color: rgba(208,74,2,0.4); }
 
 /* ══════════════════════════════════════════════════════════════════════════
    SIDEBAR & WIZARD
