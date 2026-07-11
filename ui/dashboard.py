@@ -113,7 +113,8 @@ def _scenario_bar() -> None:
     st.html(f'<div class="hz-scenario-lbl" style="display:flex; justify-content:space-between;">'
             f'<span>Execution scenario &nbsp;·&nbsp; AI model stack</span>'
             f'<span style="color:{status[0]}; font-size:11px; font-weight:600;">{status[1]}</span></div>')
-    c1, c2, c3, gap, s1, s2, s3 = st.columns([1.5, 1.5, 1.5, 0.6, 1.5, 1.5, 1.8])
+    c1, c2, c3, gap, s1, s2, s3, gap2, r1 = st.columns(
+        [1.4, 1.1, 1.4, 0.4, 1.3, 1.3, 1.7, 0.9, 1.3])
 
     current = st.session_state.get("current_scenario", "base")
     labels = {"conservative": "Conservative", "base": "Base", "aggressive": "Aggressive"}
@@ -129,28 +130,23 @@ def _scenario_bar() -> None:
 
     from config.value_pools import AI_STACKS
     stack = st.session_state.get("ai_stack", "Balanced")
+    stack_effect = {"Frontier": "Run costs +30%, automation capture +6%",
+                    "Balanced": "The cost and capability reference point",
+                    "Cost-optimized": "Run costs -25%, automation capture -7%"}
     for key, col in {"Frontier": s1, "Balanced": s2, "Cost-optimized": s3}.items():
         with col:
             if st.button(key, key=f"stk_{key}", use_container_width=True,
                          type="primary" if stack == key else "secondary",
-                         help=AI_STACKS[key]["desc"]):
+                         help=f"{AI_STACKS[key]['desc']} {stack_effect[key]}."):
                 if key != stack:
                     st.session_state.ai_stack = key
                     _recompute_plan(f"AI stack set to {key}")
                     st.rerun()
 
-    # Always state what the active stack means: a control must explain itself.
-    spec = AI_STACKS.get(stack, AI_STACKS["Balanced"])
-    cap_txt = {"Frontier": "captures ~6% more of each automation pool",
-               "Balanced": "the reference point for capability and cost",
-               "Cost-optimized": "captures ~7% less of each automation pool"}[stack]
-    run_txt = {"Frontier": "annual run costs +30%", "Balanced": "annual run costs at benchmark",
-               "Cost-optimized": "annual run costs -25%"}[stack]
-    st.html(f'<div style="font-size:12px; color:var(--g500); margin:2px 0 12px;">'
-            f'<strong style="color:var(--g700);">{stack} stack</strong> · {spec["desc"]} '
-            f'In this plan: {run_txt}, {cap_txt}.</div>')
-    if st.button("↺ Restart analysis", key="restart", type="secondary"):
-        st.session_state.show_restart_confirm = True
+    with r1:
+        if st.button("↺ Restart", key="restart", type="secondary", use_container_width=True,
+                     help="Discard this engagement and start a new diagnostic"):
+            st.session_state.show_restart_confirm = True
 
     if st.session_state.get("show_restart_confirm"):
         st.warning("Are you sure you want to restart? All data will be lost.")

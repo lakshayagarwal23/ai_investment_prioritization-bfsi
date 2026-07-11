@@ -217,10 +217,11 @@ button[kind="primary"] {
     background-color: var(--pwc-orange) !important;
     color: white !important;
     border: none !important;
-    border-radius: 4px !important;
+    border-radius: 6px !important;
     font-family: var(--font-body) !important;
-    font-weight: bold !important;
-    padding: 0.6rem 2.5rem !important;
+    font-weight: 600 !important;
+    font-size: 13px !important;
+    padding: 0.45rem 1.1rem !important;
     height: auto !important;
     transition: background-color var(--dur) var(--ease) !important;
 }
@@ -231,9 +232,11 @@ button[kind="secondary"] {
     background-color: transparent !important;
     color: var(--g700) !important;
     border: 1px solid var(--g300) !important;
-    border-radius: 4px !important;
+    border-radius: 6px !important;
     font-family: var(--font-body) !important;
-    padding: 0.6rem 2.5rem !important;
+    font-weight: 500 !important;
+    font-size: 13px !important;
+    padding: 0.45rem 1.1rem !important;
     height: auto !important;
 }
 button[kind="secondary"]:hover {
@@ -244,18 +247,27 @@ button[kind="secondary"]:hover {
 /* ══════════════════════════════════════════════════════════════════════════
    HEADER (Persistent Dark Theme)
    ══════════════════════════════════════════════════════════════════════════ */
+/* Fixed header. Streamlit hides element containers whose only content is
+   out-of-flow (it reads them as empty), so we force THIS one visible with a
+   zero-height footprint — the bar itself paints at the viewport top. */
+[data-testid="stElementContainer"]:has(> [data-testid="stHtml"] .hz-header) {
+    display: block !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+}
 .hz-header {
     position: fixed;
     top: 0; left: 0; right: 0;
     height: 60px;
     background: #0A0A0A;
     border-bottom: 1px solid #1F1F1F;
-    box-shadow: 0 1px 0 rgba(208,74,2,0.35), 0 4px 20px rgba(0,0,0,0.35);
-    z-index: 1000000;
+    box-shadow: 0 1px 0 rgba(208,74,2,0.35), 0 4px 20px rgba(0,0,0,0.25);
+    z-index: 999990;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0 var(--sp-6);
+    padding: 0 max(24px, 5vw);
 }
 .hz-header-left { display: flex; align-items: center; gap: var(--sp-3); }
 .hz-logo-mark {
@@ -599,12 +611,11 @@ button[kind="secondary"]:hover {
 /* Custom Hero Layout Styles (v5 Redesign) */
 .hz-hero-container {
     background: radial-gradient(circle at 80% 50%, #201a15 0%, #111111 100%);
-    border-top: 3px solid var(--pwc-orange);
     border-bottom: 3px solid var(--pwc-orange);
     padding: var(--sp-8) 5vw;
     margin-left: -5.5vw;
     margin-right: -5.5vw;
-    margin-top: -3rem;
+    margin-top: -36px;  /* container pads 6rem; header is 60px; meet it exactly */
     color: #FFFFFF;
     display: flex;
     justify-content: space-between;
