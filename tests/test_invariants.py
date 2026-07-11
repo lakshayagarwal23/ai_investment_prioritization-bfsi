@@ -256,17 +256,32 @@ def test_size_multiplier_is_documented_in_cost_basis():
         "median firm should not show a scaling note"
 
 
-def test_ai_stack_moves_run_costs():
-    """Frontier models cost more to run; open-source-led costs less. Value
-    must order accordingly, lever by lever."""
-    frontier = {p["id"]: p["anv"] for p in
-                build_investment_plan(mf_answers(), 100.0, [], ai_stack="Frontier")}
-    balanced = {p["id"]: p["anv"] for p in
-                build_investment_plan(mf_answers(), 100.0, [], ai_stack="Balanced")}
-    cheap = {p["id"]: p["anv"] for p in
-             build_investment_plan(mf_answers(), 100.0, [], ai_stack="Cost-optimized")}
-    for lid in balanced:
-        assert frontier[lid] < balanced[lid] < cheap[lid]
+def test_ai_stack_is_a_real_tradeoff():
+    """The stack choice must price BOTH sides: capability on gross value,
+    multiplier on run cost. Verified against the declared constants, and the
+    portfolio answer must visibly move."""
+    from config.value_pools import RUN_COSTS, AI_STACKS
+    from engine.math_engine import LEVER_COMPUTE
+
+    ans = mf_answers()
+    balanced = {p["id"]: p for p in build_investment_plan(ans, 100.0, [], ai_stack="Balanced")}
+    frontier = {p["id"]: p for p in build_investment_plan(ans, 100.0, [], ai_stack="Frontier")}
+
+    # Exact reconstruction for one lever: gross x capability - run x run_x
+    run = RUN_COSTS["lever_1"]
+    gross = LEVER_COMPUTE["lever_1"](ans) + run
+    spec = AI_STACKS["Frontier"]
+    expected = (gross * spec["capability_x"] - run * spec["run_x"]) * 0.60
+    assert abs(frontier["lever_1"]["anv"] - expected) < 1.0
+
+    # The trade-off must cut both ways across the portfolio: at least one
+    # lever gains under Frontier (big pool justifies premium models) while
+    # the totals differ enough for an executive to see it move.
+    diffs = [frontier[lid]["anv"] - balanced[lid]["anv"] for lid in balanced]
+    assert any(d > 0 for d in diffs), "Frontier should lift at least one high-value lever"
+    total_delta = abs(sum(frontier[lid]["anv"] for lid in frontier)
+                      - sum(balanced[lid]["anv"] for lid in balanced))
+    assert total_delta > 200_000, "stack choice must visibly move the answer"
 
 
 # ── Bottom-up rebuild cost model ──────────────────────────────────────────────

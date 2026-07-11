@@ -17,6 +17,7 @@ def render_dashboard() -> None:
         return
 
     _foundation_flash()
+    _plan_flash()
     _scenario_bar()
 
     plan = st.session_state.thesis_plan or []
@@ -71,14 +72,37 @@ def _foundation_flash() -> None:
 
 # ── Inline scenario toggle (replaces the sidebar radio) ─────────────────────
 
-def _recompute_plan() -> None:
+def _plan_value(plan) -> float:
+    return sum(p["anv"] for p in (plan or []) if p.get("budget_approved")) / 1e6
+
+
+def _recompute_plan(change_label: str) -> None:
+    """Recompute the plan and record what the change did, so the user gets
+    explicit before/after feedback instead of a silent refresh."""
     from engine.math_engine import build_investment_plan
+    before = _plan_value(st.session_state.get("thesis_plan"))
     st.session_state.thesis_plan = build_investment_plan(
         st.session_state.discovery_answers, st.session_state.budget_usd_m,
         st.session_state.primary_goals,
         scenario=st.session_state.get("current_scenario", "base"),
         foundation_decision=st.session_state.get("foundation_decision", False),
         ai_stack=st.session_state.get("ai_stack", "Balanced"))
+    after = _plan_value(st.session_state.thesis_plan)
+    direction = "up" if after > before else ("down" if after < before else "unchanged at")
+    delta = abs(after - before)
+    if direction == "unchanged at":
+        effect = f"plan value unchanged at ${after:.1f}M per year"
+    else:
+        effect = f"plan value {direction} ${delta:.1f}M, from ${before:.1f}M to ${after:.1f}M per year"
+    st.session_state.plan_flash = f"{change_label}: {effect}. Every figure below has been recomputed."
+
+
+def _plan_flash() -> None:
+    msg = st.session_state.pop("plan_flash", None)
+    if msg:
+        st.html(f'<div style="background:var(--orange-tint); border:1px solid var(--pwc-orange); '
+                f'border-radius:4px; padding:12px 16px; font-size:13px; color:var(--g700); '
+                f'margin-bottom:16px;"><strong>✓</strong> {msg}</div>')
 
 
 def _scenario_bar() -> None:
@@ -100,22 +124,31 @@ def _scenario_bar() -> None:
                          help="How much of the modelled value we bank: 50% / 60% / 75%"):
                 if key != current:
                     st.session_state.current_scenario = key
-                    _recompute_plan()
+                    _recompute_plan(f"Scenario set to {labels[key]}")
                     st.rerun()
 
+    from config.value_pools import AI_STACKS
     stack = st.session_state.get("ai_stack", "Balanced")
-    stack_help = {"Frontier": "Premium hosted models: highest capability, ~30% higher run costs",
-                  "Balanced": "Mix of hosted and self-managed models (default)",
-                  "Cost-optimized": "Open-source-led, self-hosted where possible: ~25% lower run costs"}
     for key, col in {"Frontier": s1, "Balanced": s2, "Cost-optimized": s3}.items():
         with col:
             if st.button(key, key=f"stk_{key}", use_container_width=True,
                          type="primary" if stack == key else "secondary",
-                         help=stack_help[key]):
+                         help=AI_STACKS[key]["desc"]):
                 if key != stack:
                     st.session_state.ai_stack = key
-                    _recompute_plan()
+                    _recompute_plan(f"AI stack set to {key}")
                     st.rerun()
+
+    # Always state what the active stack means: a control must explain itself.
+    spec = AI_STACKS.get(stack, AI_STACKS["Balanced"])
+    cap_txt = {"Frontier": "captures ~6% more of each automation pool",
+               "Balanced": "the reference point for capability and cost",
+               "Cost-optimized": "captures ~7% less of each automation pool"}[stack]
+    run_txt = {"Frontier": "annual run costs +30%", "Balanced": "annual run costs at benchmark",
+               "Cost-optimized": "annual run costs -25%"}[stack]
+    st.html(f'<div style="font-size:12px; color:var(--g500); margin:2px 0 12px;">'
+            f'<strong style="color:var(--g700);">{stack} stack</strong> · {spec["desc"]} '
+            f'In this plan: {run_txt}, {cap_txt}.</div>')
     if st.button("↺ Restart analysis", key="restart", type="secondary"):
         st.session_state.show_restart_confirm = True
 

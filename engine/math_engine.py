@@ -448,7 +448,7 @@ def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0,
     haircuts = {"conservative": 0.50, "base": 0.60, "aggressive": 0.75}
     haircut = haircuts.get(scenario, 0.60)
     size_mult = compute_size_multiplier(answers)
-    stack_mult = AI_STACKS.get(ai_stack, 1.0)
+    stack = AI_STACKS.get(ai_stack, AI_STACKS["Balanced"])
 
     scored = []
     for lever in feasible_levers:
@@ -458,11 +458,13 @@ def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0,
         warning_flag = None
         if compute_fn:
             try:
-                raw = compute_fn(answers, scenario=scenario)
-                # Lever formulas embed the Balanced-stack run cost; adjust it
-                # for the chosen AI stack (frontier dearer, open-source cheaper)
-                raw += RUN_COSTS.get(lid, 0.0) * (1.0 - stack_mult)
-                anv = raw * haircut
+                # Lever formulas return value NET of the Balanced-stack run
+                # cost. Reconstruct gross, then apply the chosen stack's
+                # trade-off: capability on the gross, run multiplier on cost.
+                run_base = RUN_COSTS.get(lid, 0.0)
+                gross = compute_fn(answers, scenario=scenario) + run_base
+                anv = (gross * stack["capability_x"]
+                       - run_base * stack["run_x"]) * haircut
             except Exception:
                 # Surface the failure — never rank a broken lever as a $0 result
                 anv = 0.0

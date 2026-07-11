@@ -294,10 +294,25 @@ RUN_COSTS = {
     "lever_10": 200_000, "lever_11": 400_000, "lever_12": 400_000,
     "lever_13": 600_000, "lever_14": 400_000,
 }
+# The AI-stack choice is a genuine trade-off, priced on both sides:
+#   run_x        multiplier on annual run cost (model licences / inference)
+#   capability_x multiplier on gross value captured (better models automate
+#                more of the pool and make fewer errors)
+# So Frontier is NOT strictly worse or better: high-value use cases tend to
+# justify premium models; smaller ones often net more on a cheaper stack.
 AI_STACKS = {
-    "Frontier": 1.30,        # premium hosted models (highest capability)
-    "Balanced": 1.00,        # mix of hosted and self-managed (default)
-    "Cost-optimized": 0.75,  # open-source-led, self-hosted where possible
+    "Frontier": {
+        "run_x": 1.30, "capability_x": 1.06,
+        "desc": "Premium hosted models (e.g. frontier-class LLMs). Highest automation capture, ~30% higher run cost.",
+    },
+    "Balanced": {
+        "run_x": 1.00, "capability_x": 1.00,
+        "desc": "Mix of hosted frontier models where they earn it and self-managed models elsewhere. The default.",
+    },
+    "Cost-optimized": {
+        "run_x": 0.75, "capability_x": 0.93,
+        "desc": "Open-source-led, self-hosted where possible. ~25% lower run cost, modestly lower automation capture.",
+    },
 }
 
 # ── Auditable model constants (surfaced in the Assumptions Appendix) ─────────
@@ -361,8 +376,9 @@ CONSTANTS = {
     # vs the peer-median firm ($50B AUM, 400 ops FTE), clamped to this band.
     "Cost_Scale_Floor_x": 0.7,
     "Cost_Scale_Cap_x": 1.5,
-    # AI stack run-cost multipliers (see AI_STACKS above)
-    "AI_Stack_Frontier_x": 1.30,
-    "AI_Stack_Balanced_x": 1.00,
-    "AI_Stack_CostOptimized_x": 0.75,
+    # AI stack: run-cost x capability trade-off (see AI_STACKS above)
+    "AI_Stack_Frontier_RunCost_x": 1.30,
+    "AI_Stack_Frontier_Capability_x": 1.06,
+    "AI_Stack_CostOptimized_RunCost_x": 0.75,
+    "AI_Stack_CostOptimized_Capability_x": 0.93,
 }
