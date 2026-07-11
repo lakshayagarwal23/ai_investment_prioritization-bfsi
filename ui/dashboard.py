@@ -174,7 +174,7 @@ def _tab_recommendation(plan, answers, company):
     drivers = sorted(approved, key=lambda p: -p["anv"])[:3]
     driver_html = "".join(
         f'<span class="hz-driver-chip">{html.escape(p.get("short_name") or p["name"])}'
-        f'<span class="hz-driver-val">${p["anv_m"]:.1f}M/yr</span></span>'
+        f'<span class="hz-driver-val">returns ${p["anv_m"]:.1f}M/yr</span></span>'
         for p in drivers)
 
     risks = []
@@ -194,8 +194,9 @@ def _tab_recommendation(plan, answers, company):
         <div class="hz-decision-eyebrow">Recommendation for {company}</div>
         <div class="hz-decision-headline">Invest ${total_cost:.1f}M of your ${budget_m:.0f}M budget now.</div>
         <div class="hz-decision-sub">
-            The funded plan creates <strong>${risk_adj:.1f}M of value per year</strong> after a
-            {exec_risk*100:.0f}% risk discount, and earns back its cost in <strong>{pb_str}</strong>.
+            That ${total_cost:.1f}M is a one-off build cost. In return, the funded plan creates
+            <strong>${risk_adj:.1f}M of value every year</strong> after a {exec_risk*100:.0f}% risk
+            discount, earning the money back in <strong>{pb_str}</strong>.
             The remaining ${max(0.0, budget_m - total_cost):.1f}M stays uncommitted, because
             spending it on weaker cases would destroy value.
         </div>
@@ -266,12 +267,19 @@ def _roadmap(plan):
     nxt = [p for p in funded if p["quadrant"] == "Quick Wins / Fill-ins"]
     later = [p for p in plan if p["quadrant"] == "Park (Data-Blocked)"]
 
-    def col(items, cls, head, subtitle):
-        if items:
-            body = "".join(f'<div class="hz-road-item">{html.escape(p["name"])} · ${p["anv_m"]:.1f}M/yr</div>'
-                           for p in items)
+    def item(p, locked=False):
+        if locked:
+            money = f'Worth ${p["anv_m"]:.1f}M per year, locked until the foundation is fixed'
         else:
-            body = '<div class="hz-road-empty">None in this horizon.</div>'
+            money = (f'Costs ${p["impl_cost"]/1e6:.1f}M to build &nbsp;·&nbsp; '
+                     f'returns ${p["anv_m"]:.1f}M per year')
+        return (f'<div class="hz-road-item">{html.escape(p["name"])}'
+                f'<div style="font-size:11.5px; color:var(--g500); font-weight:400; margin-top:2px;">'
+                f'{money}</div></div>')
+
+    def col(items, cls, head, subtitle, locked=False):
+        body = "".join(item(p, locked) for p in items) if items \
+            else '<div class="hz-road-empty">None in this horizon.</div>'
         return (f'<div class="hz-road-col {cls}"><div class="hz-road-h">{head}</div>'
                 f'<div style="font-size:11px;color:var(--g500);margin-bottom:8px;">{subtitle}</div>{body}</div>')
 
@@ -279,8 +287,18 @@ def _roadmap(plan):
     st.html('<div class="hz-roadmap">'
             + col(now, "now", "Now (0-6 mo)", "High value, ready to build")
             + col(nxt, "next", "Next (6-18 mo)", "Fast, momentum-building")
-            + col(later, "later", "Later (blocked)", "High value, needs the data foundation first")
+            + col(later, "later", "Later (blocked)", "High value, needs the data foundation first", locked=True)
             + '</div>')
+
+    # Reconcile the sequence back to the headline, so the two can never
+    # appear to disagree: build costs sum to the committed figure; the
+    # per-year figures are returns, not spend.
+    total_build = sum(p["impl_cost"] for p in funded) / 1e6
+    total_value = sum(p["anv"] for p in funded) / 1e6
+    st.html(f'<div style="font-size:12.5px; color:var(--g500); margin-top:-8px;">'
+            f'Adds up: the build costs above total <strong style="color:var(--g700);">${total_build:.1f}M</strong>, '
+            f'the same figure as the headline commitment. Together they return '
+            f'<strong style="color:var(--g700);">${total_value:.1f}M per year</strong> before the risk discount.</div>')
 
 
 # ── Act 2: The Portfolio ──────────────────────────────────────────────────────
