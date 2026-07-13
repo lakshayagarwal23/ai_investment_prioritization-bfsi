@@ -41,7 +41,7 @@ _MARKET_NORMS = {
     "lever_14": "Branch-led onboarding with high application dropout",
 }
 
-_LEVERS_BY_ID = {l["id"]: l for l in BFSI_LEVERS}
+_LEVERS_BY_ID = {spec["id"]: spec for spec in BFSI_LEVERS}
 
 
 def compute_competitive_advantage_score(plan: list[dict], answers: dict) -> dict:

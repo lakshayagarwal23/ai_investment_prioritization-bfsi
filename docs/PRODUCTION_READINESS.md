@@ -8,6 +8,24 @@ that it exists.
 
 **Assessed at:** engine 5.1.0, commit `cd2e506`, 28/28 invariants passing.
 
+> **Implementation status (updated after the Phase 0 hardening pass):**
+> the following controls from this assessment are now BUILT and tested —
+> CI (tests + ruff + pip-audit + gitleaks + engine-version guard on every
+> push/PR), exact dependency pinning with local/prod version alignment
+> (Streamlit 1.39.0 everywhere), optional access gate (`APP_PASSWORD`,
+> constant-time compare; render.yaml marks it required for hosted
+> deploys), SSRF guards on outbound fetches (https-only, public IPs only,
+> DNS-resolved, bounded reads), source-domain tiering so High confidence
+> is earned by primary sources rather than asserted by the model, LLM
+> call timeouts + 24h prefill cache, structured JSON logging with
+> optional Sentry, audit rows carrying an assumptions-set hash
+> (reproducibility), data-lifecycle controls (per-run and per-company
+> erasure, retention purge; `AUDIT_DB_PATH` overridable), WAL mode, and a
+> Render health-check path. Test count is now 43. **Still open by
+> design:** everything in Phase 1–2 (SSO, Postgres/tenancy, the
+> FastAPI + Next.js platform, exports, pen test, DPDP review) — those
+> require the platform build, not hardening of the pilot.
+
 ---
 
 ## 1. Executive summary

@@ -27,14 +27,45 @@ st.set_page_config(
                 "About": "AI Investment Engine — BFSI"},
 )
 
+from observability import setup_observability
 from ui.theme import inject_theme, render_header
 from ui.landing import render_landing_page
 from ui.sidebar import init_session_state, render_intake_wizard
 from ui.dashboard import render_dashboard
 from storage.audit import init_db
 
+setup_observability()
+
+
+def _access_gate() -> bool:
+    """Optional shared-secret gate for hosted deployments.
+
+    The app ingests confidential client financials, so a world-readable URL
+    is not acceptable. Set APP_PASSWORD in the environment to require it;
+    unset (local dev) the gate is disabled. This is an interim control:
+    production access is SSO (see docs/PRODUCTION_READINESS.md 3.2).
+    """
+    import hmac
+    required = os.environ.get("APP_PASSWORD", "")
+    if not required:
+        return True
+    if st.session_state.get("_access_ok"):
+        return True
+    st.markdown("### This engagement tool is access-restricted")
+    supplied = st.text_input("Access code", type="password",
+                             help="Provided by the engagement team")
+    if supplied:
+        if hmac.compare_digest(supplied, required):
+            st.session_state._access_ok = True
+            st.rerun()
+        else:
+            st.error("That access code is not valid.")
+    return False
+
 
 def main() -> None:
+    if not _access_gate():
+        return
     inject_theme()
     init_session_state()
     init_db()

@@ -42,10 +42,22 @@ Returns:
 }
 """
 from __future__ import annotations
+import ipaddress
 import os
 import json
+import socket
 import time
 import re
+from urllib.parse import urlparse
+
+from observability import get_logger
+
+_log = get_logger("horizon.prefill")
+
+# Gemini call ceiling per prefill run and hard timeout per call: retrieval
+# must never hang the wizard or run up an unbounded bill.
+LLM_TIMEOUT_MS = 45_000
+CACHE_TTL_S = 24 * 3600   # a firm's public facts don't change intra-day
 
 # ── Field definitions: what is genuinely findable, and how to ask for it ────
 # Each field gets its OWN targeted query set. This is the single biggest fix.
@@ -103,7 +115,44 @@ FIELD_SPECS = {
     },
 }
 
-_CACHE: dict[str, dict] = {}   # per-process cache keyed on company name
+_CACHE: dict[str, tuple[float, dict]] = {}   # company -> (fetched_at, result)
+
+# Source tiering: numeric facts only earn High confidence from primary
+# sources (regulators, exchanges, the company's own filings). Everything
+# else is capped at Med so the reviewer's attention lands where it should.
+TIER_A_SUFFIXES = (".gov.in", ".sebi.gov.in", ".irdai.gov.in", ".rbi.org.in",
+                   ".amfiindia.com", ".bseindia.com", ".nseindia.com", ".sec.gov")
+
+
+def _is_safe_url(url: str) -> bool:
+    """SSRF guard for outbound page fetches: https only, no credentials in
+    the URL, no private/loopback/link-local/metadata destinations. Resolves
+    the hostname so DNS-based dodges (private A records) are caught too."""
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme != "https" or not parsed.hostname or parsed.username:
+            return False
+        host = parsed.hostname
+        try:
+            infos = socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
+        except socket.gaierror:
+            return False
+        for info in infos:
+            ip = ipaddress.ip_address(info[4][0])
+            if (ip.is_private or ip.is_loopback or ip.is_link_local
+                    or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+                return False
+        return True
+    except Exception:
+        return False
+
+
+def _confidence_cap(source_url: str) -> str:
+    """High only for tier-A primary sources; everything else caps at Med."""
+    host = (urlparse(source_url).hostname or "").lower()
+    if any(host == s.lstrip(".") or host.endswith(s) for s in TIER_A_SUFFIXES):
+        return "High"
+    return "Med"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -114,8 +163,9 @@ def extract_company_data(company_name: str) -> dict:
     company_name = (company_name or "").strip()
     if not company_name:
         return {}
-    if company_name in _CACHE:
-        return _CACHE[company_name]
+    cached = _CACHE.get(company_name)
+    if cached and (time.time() - cached[0]) < CACHE_TTL_S:
+        return cached[1]
 
     t0 = time.time()
     log = {"queries_run": [], "sources_seen": [], "fields_found": [],
@@ -146,7 +196,9 @@ def extract_company_data(company_name: str) -> dict:
     if result or log["queries_run"]:
         result["_search_log"] = log
 
-    _CACHE[company_name] = result
+    _log.info("prefill complete", extra={"company": company_name, "event": "prefill",
+                                         "duration_s": log["duration_s"]})
+    _CACHE[company_name] = (time.time(), result)
     return result
 
 
@@ -161,7 +213,8 @@ def _tier1_grounded_research(company: str, api_key: str, log: dict) -> str:
     try:
         from google import genai
         from google.genai import types
-        client = genai.Client(api_key=api_key)
+        client = genai.Client(api_key=api_key,
+                              http_options=types.HttpOptions(timeout=LLM_TIMEOUT_MS))
 
         field_briefs = "\n".join(
             f"- {fid} ({spec['label']}): try searches like " +
@@ -240,13 +293,19 @@ def _tier2_ddgs_research(company: str, log: dict) -> str:
 
 
 def _fetch_page(url: str) -> str:
-    """Direct fetch of a trusted publisher page (NOT a search-engine SERP)."""
+    """Direct fetch of a trusted publisher page (NOT a search-engine SERP).
+    SSRF-guarded: https-only, public destinations only, bounded size."""
+    if not _is_safe_url(url):
+        _log.warning("blocked unsafe fetch", extra={"event": "ssrf_block"})
+        return ""
     try:
         import requests
-        r = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0 (research)"})
+        r = requests.get(url, timeout=8, allow_redirects=False,
+                         headers={"User-Agent": "Mozilla/5.0 (research)"}, stream=True)
         if r.status_code != 200 or "text/html" not in r.headers.get("content-type", ""):
             return ""
-        text = re.sub(r"<script.*?</script>|<style.*?</style>", " ", r.text, flags=re.S)
+        raw = r.raw.read(512_000, decode_content=True).decode("utf-8", "ignore")
+        text = re.sub(r"<script.*?</script>|<style.*?</style>", " ", raw, flags=re.S)
         text = re.sub(r"<[^>]+>", " ", text)
         return re.sub(r"\s+", " ", text).strip()
     except Exception:
@@ -261,7 +320,8 @@ def _structured_extract(company: str, research: str, api_key: str, log: dict) ->
     try:
         from google import genai
         from google.genai import types
-        client = genai.Client(api_key=api_key)
+        client = genai.Client(api_key=api_key,
+                              http_options=types.HttpOptions(timeout=LLM_TIMEOUT_MS))
 
         prov = types.Schema(
             type=types.Type.OBJECT,
@@ -319,7 +379,10 @@ RESEARCH NOTES:
 
 
 def _validate(data: dict) -> dict:
-    """Numeric sanity guards; drop values outside plausible ranges."""
+    """Numeric sanity guards, plus source tiering: retrieved text is
+    untrusted input, so model-asserted confidence is capped by the QUALITY
+    OF THE SOURCE DOMAIN, not taken at face value (prompt-injection and
+    SEO-spam defence)."""
     ranges = {"S1_AUM": (0.05, 5000.0),
               "S3_ANNUAL_CLAIMS": (100, 50_000_000),
               "S2_ANNUAL_UNDERWRITING_APPS": (100, 50_000_000)}
@@ -334,6 +397,11 @@ def _validate(data: dict) -> dict:
                     obj["value"] = str(v)
             except ValueError:
                 data.pop(fid, None)
+    for obj in data.values():
+        if isinstance(obj, dict) and "confidence" in obj:
+            cap = _confidence_cap(str(obj.get("source_url", "")))
+            if obj["confidence"] == "High" and cap != "High":
+                obj["confidence"] = "Med"
     return data
 
 

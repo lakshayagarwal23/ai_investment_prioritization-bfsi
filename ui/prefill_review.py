@@ -48,7 +48,6 @@ def render_prefill_review() -> None:
     """)
 
     found = {k: v for k, v in prov.items() if isinstance(v, dict) and k in _Q_BY_ID}
-    attempted = set(log.get("fields_found", [])) | set(log.get("fields_missing", []))
     missing = [f for f in log.get("fields_missing", []) if f in _Q_BY_ID]
 
     # ── Found fields: value + source + keep/discard ─────────────────────────

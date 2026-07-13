@@ -4,6 +4,12 @@ llm/openai_client.py — Premium HTML-rich Strategic Investment Memo (Powered by
 from __future__ import annotations
 import os
 from google import genai
+from google.genai import types
+
+from observability import get_logger
+
+_log = get_logger("horizon.memo")
+LLM_TIMEOUT_MS = 60_000
 
 
 def generate_executive_summary(company: str, plan: list[dict], answers: dict, sector: str = "Financial Services") -> str:
@@ -52,7 +58,8 @@ def generate_executive_summary(company: str, plan: list[dict], answers: dict, se
     if not api_key:
         ai_narrative = "<div class='hz-status-breach' style='padding: 12px; margin-bottom: 20px;'><strong>Configuration Error:</strong> GEMINI_API_KEY is missing. Narrative generation is disabled. Please provide a valid API key to enable LLM features.</div>"
     else:
-        client = genai.Client(api_key=api_key)
+        client = genai.Client(api_key=api_key,
+                              http_options=types.HttpOptions(timeout=LLM_TIMEOUT_MS))
         prompt = f"""
         You are a tier-1 management consultant (McKinsey/PwC) advising the C-suite of {company}, a firm in the {sector} sector.
         We have just generated an AI Use Case Prioritization Matrix for them. 
@@ -76,8 +83,10 @@ def generate_executive_summary(company: str, plan: list[dict], answers: dict, se
                 contents=prompt
             )
             ai_narrative = response.text.replace("```html", "").replace("```", "")
-        except Exception as e:
-            print(f"Gemini API Error: {e}")
+        except Exception:
+            _log.warning("memo generation failed; using fallback",
+                         extra={"event": "memo_fallback", "provider": "gemini"},
+                         exc_info=True)
             ai_narrative = f'''<p class="hz-p">
             AI transformation fails when firms chase hype rather than feasibility. For <strong>{company}</strong>, success requires a disciplined, matrix-driven approach that plots use cases against actual data readiness and business impact.
             </p>'''

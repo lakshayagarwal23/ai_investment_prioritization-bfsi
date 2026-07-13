@@ -8,8 +8,6 @@ import html
 from engine.competitive import compute_competitive_advantage_score
 from engine.math_engine import (compute_execution_risk, payback_months,
                                 IMPACT_THRESHOLD, FEASIBILITY_THRESHOLD)
-from storage.audit import ENGINE_VERSION, CORPUS_VERSION
-from config.value_pools import PLATFORM_GATED_LEVERS
 
 def render_dashboard() -> None:
     if not st.session_state.get("thesis_generated"):
@@ -594,7 +592,7 @@ def _tab_assumptions() -> None:
 
     st.html('<div class="hz-report-h2" style="margin-top:32px;">Lever Benchmarks</div>')
     from config.value_pools import BFSI_LEVERS
-    brows = "".join(f"<tr><td><strong>{html.escape(l['name'])}</strong></td><td>{html.escape(l.get('benchmark',''))}</td></tr>" for l in BFSI_LEVERS)
+    brows = "".join(f"<tr><td><strong>{html.escape(spec['name'])}</strong></td><td>{html.escape(spec.get('benchmark',''))}</td></tr>" for spec in BFSI_LEVERS)
     st.html(f'<table class="hz-table-wrap"><thead><tr><th>Lever</th><th>Benchmark source</th></tr></thead><tbody>{brows}</tbody></table>')
 
 

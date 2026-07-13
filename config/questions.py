@@ -28,7 +28,8 @@ def get_questions_for_section(section_id: str, sector: str = "all") -> list[dict
 OTHER_OPTION = "Other (type below)"
 
 # Single source of truth: the goal strings levers align to in value_pools.py.
-from config.value_pools import GOALS as OBJECTIVE_INPUTS
+# Re-exported here because the questionnaire is where the UI reads them.
+from config.value_pools import GOALS as OBJECTIVE_INPUTS  # noqa: F401, E402
 
 QUESTIONS = [
     # ─── S1: Technology & Data Infrastructure ─────────────────────────────────

@@ -5,8 +5,17 @@ services:
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+    healthCheckPath: /_stcore/health
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.9
       - key: GEMINI_API_KEY
+        sync: false
+      # REQUIRED for any shared deployment: the tool ingests confidential
+      # client financials and must never be world-readable. Interim control
+      # until SSO lands (docs/PRODUCTION_READINESS.md 3.2).
+      - key: APP_PASSWORD
+        sync: false
+      # Optional: error tracking (pip install sentry-sdk and set the DSN)
+      - key: SENTRY_DSN
         sync: false

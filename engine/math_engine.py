@@ -19,8 +19,7 @@ DESIGN CONTRACT
 """
 
 from __future__ import annotations
-from config.value_pools import (BFSI_LEVERS, CONSTANTS, GOALS,
-                                PLATFORM_GATED_LEVERS, COST_BASIS,
+from config.value_pools import (BFSI_LEVERS, CONSTANTS, PLATFORM_GATED_LEVERS, COST_BASIS,
                                 RUN_COSTS, AI_STACKS)
 from engine.regulatory import check_regulatory_compliance
 
@@ -442,8 +441,8 @@ def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0,
 
     exec_risk = compute_execution_risk(answers)
     sector = answers.get("target_sector", "all")
-    feasible_levers = [l for l in BFSI_LEVERS
-                       if "all" in l.get("sectors", ["all"]) or sector in l.get("sectors", ["all"])]
+    feasible_levers = [spec for spec in BFSI_LEVERS
+                       if "all" in spec.get("sectors", ["all"]) or sector in spec.get("sectors", ["all"])]
 
     haircuts = {"conservative": 0.50, "base": 0.60, "aggressive": 0.75}
     haircut = haircuts.get(scenario, 0.60)

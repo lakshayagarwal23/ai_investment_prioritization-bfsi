@@ -1,0 +1,19 @@
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+exclude = [".venv", "__pycache__", "build_framework.py", "debug_test.py", "test_ui.py"]
+
+[tool.ruff.lint]
+# Correctness-focused: real defects, unused code, dangerous patterns.
+# Style-only rules stay off so HTML-heavy UI strings don't drown the signal.
+select = ["E4", "E7", "E9", "F", "B", "PLE"]
+ignore = [
+    "E731",  # lambda assignments are used deliberately in tests/harness
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff.lint.per-file-ignores]
+"app.py" = ["E402"]  # dotenv load + st.set_page_config must run before UI imports

@@ -307,8 +307,8 @@ def render_foundation_decision() -> None:
     with col_table:
         modern_row = (f'<tr><td>Committed to modernization</td>'
                       f'<td class="num">${pos["modern_m"]:.1f}M</td></tr>') if pos["modern_m"] > 0 else \
-                     (f'<tr><td>Committed to modernization</td>'
-                      f'<td class="num" style="color:var(--g500);">$0.0M (not in plan)</td></tr>')
+                     ('<tr><td>Committed to modernization</td>'
+                      '<td class="num" style="color:var(--g500);">$0.0M (not in plan)</td></tr>')
         st.html(f"""
         <table class="hz-table-wrap" style="margin-top:24px;">
           <tbody>

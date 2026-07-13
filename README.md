@@ -39,12 +39,23 @@ cp .env.template .env          # then paste your Google AI Studio key
 streamlit run app.py           # opens on http://localhost:8501
 ```
 
-**Tests** (28 invariants — every one encodes a defect class that actually
-shipped once):
+**Tests** (43 invariants — every one encodes a defect class that actually
+shipped once, plus the production-hardening controls):
 
 ```bash
+pip install -r requirements-dev.txt   # dev/CI tooling
 python -m pytest tests/ -q
+ruff check .
 ```
+
+**CI** runs on every push/PR (`.github/workflows/ci.yml`): the test suite,
+ruff, pip-audit (advisory), gitleaks secret scanning, and a guard that
+fails the build if model files change without an `ENGINE_VERSION` bump.
+
+**Hosted deployments:** set `APP_PASSWORD` (the app then requires an access
+code before rendering — it ingests confidential client data and must never
+be world-readable), and optionally `SENTRY_DSN`, `AUDIT_DB_PATH`,
+`LOG_LEVEL`. See `.env.template` for the full list.
 
 ## What the user experiences
 
