@@ -1,0 +1,5 @@
+# API service (FastAPI backbone) — install alongside requirements.txt
+-r requirements.txt
+fastapi==0.139.0
+uvicorn==0.51.0
+httpx==0.28.1

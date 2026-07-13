@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+/* PwC Horizon design tokens — same system as the Streamlit pilot */
+@theme {
+  --color-flame: #d04a02;
+  --color-flame-dark: #a63b01;
+  --color-tangerine: #eb8c00;
+  --color-maroon: #a32020;
+  --color-ink: #0a0a0a;
+  --color-ink-soft: #1f1f1f;
+  --color-g900: #2d2d2d;
+  --color-g700: #464646;
+  --color-g500: #7d7d7d;
+  --color-g300: #bdbdbd;
+  --color-g200: #dedede;
+  --color-g100: #f2f2f2;
+  --font-display: Georgia, "Times New Roman", serif;
+  --font-sans: var(--font-inter), -apple-system, "Segoe UI", Arial, sans-serif;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: #ffffff;
+  color: var(--color-g700);
+  font-family: var(--font-sans);
+  font-size: 14px;
+}
+
+.display {
+  font-family: var(--font-display);
+  color: #000;
+}
+
+/* Quiet card with the hover lift used across the product */
+.card {
+  border: 1px solid var(--color-g200);
+  border-radius: 8px;
+  background: #fff;
+  transition: border-color 140ms cubic-bezier(0.2, 0, 0, 1),
+    transform 140ms cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 140ms cubic-bezier(0.2, 0, 0, 1);
+}
+.card-hover:hover {
+  border-color: var(--color-flame);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(45, 45, 45, 0.08);
+}
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-flame);
+}
+
+/* Table language shared by every exhibit */
+.hz-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.hz-table th {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-g500);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 2px solid var(--color-g200);
+  padding: 10px 8px;
+  text-align: left;
+}
+.hz-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--color-g100);
+}
+.hz-table td.num,
+.hz-table th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #000;
+}
+.hz-table tbody tr:hover td {
+  background: var(--color-g100);
+}
+
+details > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-g700);
+  font-size: 13px;
+  padding: 12px 16px;
+}
+details > summary:hover {
+  color: var(--color-flame);
+}
+details {
+  border: 1px solid var(--color-g200);
+  border-radius: 8px;
+  background: #fff;
+}
+details[open] > summary {
+  border-bottom: 1px solid var(--color-g100);
+}

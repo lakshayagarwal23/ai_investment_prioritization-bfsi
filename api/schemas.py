@@ -1,0 +1,118 @@
+"""
+api/schemas.py — the typed contract between the engine and any front end.
+
+Every request is validated here (never trust a client), and every response
+is shaped here so the web app renders data, not guesses. The engine itself
+stays untouched: this layer only validates in and serialises out.
+"""
+from __future__ import annotations
+
+from typing import Any, Literal, Optional
+
+from pydantic import BaseModel, Field, field_validator
+
+
+Scenario = Literal["conservative", "base", "aggressive"]
+AiStack = Literal["Frontier", "Balanced", "Cost-optimized"]
+
+
+class ReportRequest(BaseModel):
+    answers: dict[str, Any] = Field(default_factory=dict)
+    company_name: str = Field(default="New engagement", max_length=120)
+    target_sector: str = "Mutual Funds / Asset Management"
+    budget_usd_m: float = Field(default=100.0, gt=0, le=10_000)
+    primary_goals: list[str] = Field(default_factory=list)
+    scenario: Scenario = "base"
+    ai_stack: AiStack = "Balanced"
+    foundation_decision: bool = False
+
+    @field_validator("primary_goals")
+    @classmethod
+    def goals_must_exist(cls, v: list[str]) -> list[str]:
+        from config.value_pools import GOALS
+        unknown = [g for g in v if g not in GOALS]
+        if unknown:
+            raise ValueError(f"unknown goals: {unknown}")
+        return v
+
+    @field_validator("target_sector")
+    @classmethod
+    def sector_must_exist(cls, v: str) -> str:
+        from config.value_pools import SECTOR_MF, SECTOR_INS, SECTOR_DIV
+        if v not in (SECTOR_MF, SECTOR_INS, SECTOR_DIV):
+            raise ValueError(f"unknown sector: {v}")
+        return v
+
+
+class LeverOut(BaseModel):
+    id: str
+    name: str
+    short_name: str
+    quadrant: str
+    quadrant_label: str
+    anv_m: float
+    impl_cost_m: float
+    payback_months: Optional[float]
+    impact: int
+    feasibility: int
+    priority: str
+    budget_approved: bool
+    warning: Optional[str]
+    reg_risk: str
+    reg_mitigations: list[str]
+    cost_basis: str
+
+
+class PortfolioSummary(BaseModel):
+    company_name: str
+    budget_m: float
+    committed_m: float
+    uncommitted_m: float
+    total_anv_m: float
+    risk_adjusted_anv_m: float
+    exec_risk_pct: int
+    confidence_pct: int
+    payback_months: Optional[float]
+    funded_count: int
+    blocked_anv_m: float
+
+
+class RebuildComponent(BaseModel):
+    component: str
+    amount_m: float
+    basis: str
+
+
+class DiagnosticOut(BaseModel):
+    verdict: str
+    verdict_action: str
+    deprecation_score: int
+    score_math: str
+    pillars: dict[str, int]
+    pillar_explain: dict[str, str]
+    tco: dict[str, Any]
+    self_funding: dict[str, Any]
+    rebuild_breakdown: list[RebuildComponent]
+    guardrails: list[str]
+    recommend_funding: bool
+
+
+class ReportResponse(BaseModel):
+    run_id: str
+    engine_version: str
+    assumptions_hash: str
+    summary: PortfolioSummary
+    levers: list[LeverOut]
+    diagnostic: DiagnosticOut
+    scenario: Scenario
+    ai_stack: AiStack
+    foundation_decision: bool
+
+
+class ConfigResponse(BaseModel):
+    sectors: list[str]
+    goals: list[str]
+    scenarios: list[str]
+    ai_stacks: dict[str, dict[str, Any]]
+    questions: list[dict[str, Any]]
+    engine_version: str
