@@ -144,3 +144,30 @@ def purge_runs_older_than(days: int) -> int:
         cur = conn.execute("DELETE FROM runs WHERE ts <= ?", (cutoff,))
     _log.info("retention purge", extra={"event": "retention_purge"})
     return cur.rowcount
+
+
+def fetch_run(run_id: str) -> dict | None:
+    """Load one run row (for report-by-URL reconstruction)."""
+    with _connect() as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT run_id, ts, company, engine_version, inputs_json, payload_json"
+            " FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+    if not row:
+        return None
+    return {
+        "run_id": row["run_id"], "ts": row["ts"], "company": row["company"],
+        "engine_version": row["engine_version"],
+        "inputs": json.loads(row["inputs_json"]),
+        "payload": json.loads(row["payload_json"]),
+    }
+
+
+def list_runs(limit: int = 25) -> list[dict]:
+    """Most recent runs, newest first (the engagements list)."""
+    with _connect() as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT run_id, ts, company, mode FROM runs"
+            " ORDER BY ts DESC LIMIT ?", (int(limit),)).fetchall()
+    return [dict(r) for r in rows]

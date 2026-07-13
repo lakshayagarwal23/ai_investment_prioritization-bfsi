@@ -19,10 +19,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # production injects env vars natively
+
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.schemas import (ConfigResponse, DiagnosticOut, LeverOut,
+from api.schemas import (ConfigResponse, DiagnosticOut, LeverOut, MemoResponse,
                          PortfolioSummary, RebuildComponent, ReportRequest,
                          ReportResponse)
 from observability import get_logger, setup_observability
@@ -84,11 +90,10 @@ async def get_config() -> ConfigResponse:
     )
 
 
-@app.post("/api/report", response_model=ReportResponse,
-          dependencies=[Depends(require_token)])
-async def compute_report(req: ReportRequest) -> ReportResponse:
-    """One call, the whole report: plan + portfolio summary + legacy
-    diagnostic, logged to the audit trail exactly like the Streamlit app."""
+def _compute_response(req: ReportRequest,
+                      existing_run_id: str | None = None) -> ReportResponse:
+    """The whole report: plan + portfolio summary + legacy diagnostic.
+    Logs a new audit row unless reconstructing an existing run by id."""
     from config.value_pools import PLATFORM_GATED_LEVERS
     from engine.legacy_diagnostic import LegacyInputs, run_diagnostic
     from engine.math_engine import (build_investment_plan,
@@ -177,12 +182,18 @@ async def compute_report(req: ReportRequest) -> ReportResponse:
         guardrails=diag["guardrails"], recommend_funding=diag["recommend_funding"],
     )
 
-    run_id = log_run(company=req.company_name, inputs=answers,
-                     plan=plan, payload={"summary": summary.model_dump()},
-                     mode="api")
-    _log.info("report computed", extra={"run_id": run_id,
-                                        "company": req.company_name,
-                                        "event": "api_report"})
+    if existing_run_id is None:
+        # The request is stored with the run so any report is rebuildable
+        # from its URL alone (deterministic engine + stored inputs + knobs).
+        run_id = log_run(company=req.company_name, inputs=answers, plan=plan,
+                         payload={"summary": summary.model_dump(),
+                                  "request": req.model_dump()},
+                         mode="api")
+        _log.info("report computed", extra={"run_id": run_id,
+                                            "company": req.company_name,
+                                            "event": "api_report"})
+    else:
+        run_id = existing_run_id
 
     return ReportResponse(
         run_id=run_id, engine_version=ENGINE_VERSION,
@@ -190,4 +201,55 @@ async def compute_report(req: ReportRequest) -> ReportResponse:
         summary=summary, levers=levers, diagnostic=diagnostic,
         scenario=req.scenario, ai_stack=req.ai_stack,
         foundation_decision=req.foundation_decision,
+        request=req,
     )
+
+
+@app.post("/api/report", response_model=ReportResponse,
+          dependencies=[Depends(require_token)])
+async def compute_report(req: ReportRequest) -> ReportResponse:
+    return _compute_response(req)
+
+
+@app.get("/api/runs", dependencies=[Depends(require_token)])
+async def get_runs(limit: int = 25) -> list[dict]:
+    """The engagements list: recent runs, newest first."""
+    from storage.audit import list_runs
+    return list_runs(min(max(1, limit), 100))
+
+
+@app.get("/api/runs/{run_id}", response_model=ReportResponse,
+         dependencies=[Depends(require_token)])
+async def get_run(run_id: str) -> ReportResponse:
+    """Rebuild a past report from the audit trail: stored inputs + stored
+    knobs through the deterministic engine. Reports are URLs, not sessions."""
+    from storage.audit import fetch_run
+    row = fetch_run(run_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="run not found")
+    stored = (row.get("payload") or {}).get("request")
+    if not stored:
+        raise HTTPException(status_code=409,
+                            detail="run predates report-by-URL; generate a new report")
+    return _compute_response(ReportRequest(**stored), existing_run_id=run_id)
+
+
+@app.post("/api/memo", response_model=MemoResponse,
+          dependencies=[Depends(require_token)])
+async def compute_memo(req: ReportRequest) -> MemoResponse:
+    """Narrative memo grounded in the computed plan. Generated on demand
+    (never automatically) so LLM spend is a user choice, not a side effect."""
+    from engine.math_engine import build_investment_plan
+    from llm.openai_client import generate_memo_paragraphs
+
+    answers = dict(req.answers)
+    answers["target_sector"] = req.target_sector
+    plan = build_investment_plan(
+        answers, req.budget_usd_m, req.primary_goals,
+        scenario=req.scenario, foundation_decision=req.foundation_decision,
+        ai_stack=req.ai_stack)
+    result = generate_memo_paragraphs(req.company_name, plan, req.target_sector)
+    _log.info("memo computed", extra={"company": req.company_name,
+                                      "event": "api_memo",
+                                      "provider": "gemini" if result["generated"] else "fallback"})
+    return MemoResponse(**result)

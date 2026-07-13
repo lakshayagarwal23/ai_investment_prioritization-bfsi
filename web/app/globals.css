@@ -107,3 +107,26 @@ details {
 details[open] > summary {
   border-bottom: 1px solid var(--color-g100);
 }
+
+/* Motion: sections rise in once; recompute spinner */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+section[id] {
+  animation: fadeUp 420ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+.spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2.5px solid var(--color-g200);
+  border-top-color: var(--color-flame);
+  animation: spin 700ms linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media print {
+  .sticky, header { display: none !important; }
+  section[id] { animation: none; }
+}

@@ -85,17 +85,7 @@ export default function DiagnosticPage() {
         foundation_decision: false,
       });
       sessionStorage.setItem("hz_report", JSON.stringify(report));
-      sessionStorage.setItem(
-        "hz_request",
-        JSON.stringify({
-          answers,
-          company_name: company.trim(),
-          target_sector: sector,
-          budget_usd_m: budget,
-          primary_goals: goals,
-        }),
-      );
-      router.push("/report");
+      router.push(`/report?run=${report.run_id}`);
     } catch (e) {
       setError(String(e));
       setBusy(false);

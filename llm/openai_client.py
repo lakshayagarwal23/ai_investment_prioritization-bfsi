@@ -12,6 +12,56 @@ _log = get_logger("horizon.memo")
 LLM_TIMEOUT_MS = 60_000
 
 
+def generate_memo_paragraphs(company: str, plan: list[dict], sector: str) -> dict:
+    """Plain-text memo narrative for the API/web front end: three grounded
+    paragraphs, no HTML. Degrades honestly when no key or on failure."""
+    import html as _html
+    company = _html.escape((company or "the firm").strip())
+    bets = [p for p in plan if p["quadrant"] == "Strategic Bets"]
+    top = [p["name"] for p in bets[:3]] or [p["name"] for p in plan[:3]]
+
+    fallback = [
+        f"AI transformation fails when firms chase hype rather than feasibility. "
+        f"For {company}, the prioritisation matrix plots every use case against "
+        f"actual data readiness and business impact, so capital flows to what "
+        f"can be delivered, not what is fashionable.",
+        f"The strategic bets — {', '.join(top)} — combine high value with high "
+        f"readiness on {company}'s own answers. They are the engines of the "
+        f"programme and should receive the first capital.",
+        "Everything parked is parked for a stated reason: the data foundation "
+        "cannot support it yet. Funding modernization changes that calculus, "
+        "and the plan recomputes the moment the decision changes.",
+    ]
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return {"generated": False, "paragraphs": fallback, "grounded_on": top}
+
+    prompt = f"""You are a tier-1 management consultant advising the C-suite of {company},
+a firm in the {sector} sector. We generated an AI use-case prioritisation
+matrix for them. The top strategic bets are: {', '.join(top)}.
+
+Write exactly 3 paragraphs (separated by one blank line) explaining why a
+matrix-driven approach beats ad-hoc AI experimentation, and why these
+specific bets earn the first capital, in terms of business impact vs
+delivery feasibility (data readiness, legacy constraints, governance).
+
+RULES: plain text only — no HTML, no markdown, no headings, no lists.
+No financial figures, ROIs or dollar amounts. No technologies or industry
+buzzwords that are not in the provided bets. Professional, C-suite tone."""
+    try:
+        client = genai.Client(api_key=api_key,
+                              http_options=types.HttpOptions(timeout=LLM_TIMEOUT_MS))
+        resp = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        paras = [p.strip() for p in (resp.text or "").split("\n\n") if p.strip()]
+        if len(paras) >= 2:
+            return {"generated": True, "paragraphs": paras[:3], "grounded_on": top}
+    except Exception:
+        _log.warning("memo narrative failed; using fallback",
+                     extra={"event": "memo_fallback", "provider": "gemini"}, exc_info=True)
+    return {"generated": False, "paragraphs": fallback, "grounded_on": top}
+
+
 def generate_executive_summary(company: str, plan: list[dict], answers: dict, sector: str = "Financial Services") -> str:
     import html as _html
     company_raw = company or "the firm"

@@ -72,3 +72,34 @@ def test_bearer_auth_enforced_when_configured(client, monkeypatch):
                       headers={"Authorization": "Bearer wrong"}).status_code == 401
     assert client.get("/api/config",
                       headers={"Authorization": "Bearer s3cret"}).status_code == 200
+
+
+def test_memo_degrades_honestly_without_key(client, monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    r = client.post("/api/memo", json={
+        "answers": mf_answers(), "company_name": "Memo Test AMC",
+        "target_sector": "Mutual Funds / Asset Management",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert body["generated"] is False, "no key must mean an honest fallback, not silence"
+    assert len(body["paragraphs"]) >= 2 and body["grounded_on"]
+
+
+def test_reports_are_rebuildable_by_url(client):
+    """A run id must reconstruct the exact same report from the audit trail."""
+    first = client.post("/api/report", json={
+        "answers": mf_answers(), "company_name": "Durable Reports AMC",
+        "target_sector": "Mutual Funds / Asset Management",
+        "budget_usd_m": 80.0, "scenario": "aggressive", "ai_stack": "Frontier",
+    }).json()
+    rebuilt = client.get(f"/api/runs/{first['run_id']}")
+    assert rebuilt.status_code == 200
+    body = rebuilt.json()
+    assert body["run_id"] == first["run_id"]
+    assert body["summary"] == first["summary"], "deterministic rebuild must match"
+    assert body["scenario"] == "aggressive" and body["ai_stack"] == "Frontier"
+    assert client.get("/api/runs/nonexist1").status_code == 404
+
+    runs = client.get("/api/runs").json()
+    assert any(r["run_id"] == first["run_id"] for r in runs)

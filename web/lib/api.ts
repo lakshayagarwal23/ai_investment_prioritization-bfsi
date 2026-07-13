@@ -99,6 +99,14 @@ export interface Report {
   scenario: Scenario;
   ai_stack: AiStack;
   foundation_decision: boolean;
+  request: ReportRequest;
+}
+
+export interface RunListItem {
+  run_id: string;
+  ts: string;
+  company: string;
+  mode: string;
 }
 
 export interface ReportRequest {
@@ -125,5 +133,17 @@ export async function computeReport(req: ReportRequest): Promise<Report> {
     body: JSON.stringify(req),
   });
   if (!r.ok) throw new Error(`report failed: ${r.status} ${await r.text()}`);
+  return r.json();
+}
+
+export async function fetchRun(runId: string): Promise<Report> {
+  const r = await fetch(`${API_URL}/api/runs/${encodeURIComponent(runId)}`);
+  if (!r.ok) throw new Error(`run failed: ${r.status}`);
+  return r.json();
+}
+
+export async function listRuns(): Promise<RunListItem[]> {
+  const r = await fetch(`${API_URL}/api/runs`);
+  if (!r.ok) throw new Error(`runs failed: ${r.status}`);
   return r.json();
 }

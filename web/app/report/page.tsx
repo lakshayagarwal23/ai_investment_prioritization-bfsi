@@ -6,16 +6,20 @@
  * the foundation decision re-compute live against the engine API, always
  * with explicit before/after feedback.
  */
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   computeReport,
+  fetchRun,
   type AiStack,
   type Lever,
   type Report,
-  type ReportRequest,
   type Scenario,
 } from "@/lib/api";
+import Matrix from "@/components/Matrix";
+import Donut from "@/components/Donut";
+import MemoSection from "@/components/MemoSection";
 
 const NAV = [
   ["decision", "What should we fund?"],
@@ -32,19 +36,49 @@ const STACK_NOTES: Record<AiStack, string> = {
 };
 
 export default function ReportPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-3xl px-6 py-24 text-center text-g500">
+          Loading the report…
+        </div>
+      }
+    >
+      <ReportInner />
+    </Suspense>
+  );
+}
+
+function ReportInner() {
+  const router = useRouter();
+  const runParam = useSearchParams().get("run");
   const [report, setReport] = useState<Report | null>(null);
-  const [base, setBase] = useState<Omit<ReportRequest, "scenario" | "ai_stack" | "foundation_decision"> | null>(null);
+  const [notFound, setNotFound] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // Reports are URLs: prefer the fresh session copy when it matches the
+  // run id, otherwise rebuild the report from the audit trail by id.
   useEffect(() => {
-    const r = sessionStorage.getItem("hz_report");
-    const q = sessionStorage.getItem("hz_request");
-    if (r && q) {
-      setReport(JSON.parse(r));
-      setBase(JSON.parse(q));
+    const cached = sessionStorage.getItem("hz_report");
+    if (cached) {
+      const r: Report = JSON.parse(cached);
+      if (!runParam || r.run_id === runParam) {
+        setReport(r);
+        return;
+      }
     }
-  }, []);
+    if (runParam) {
+      fetchRun(runParam)
+        .then((r) => {
+          sessionStorage.setItem("hz_report", JSON.stringify(r));
+          setReport(r);
+        })
+        .catch(() => setNotFound(true));
+    }
+  }, [runParam]);
+
+  const base = report ? report.request : null;
 
   async function recompute(
     changes: Partial<Pick<Report, "scenario" | "ai_stack" | "foundation_decision">>,
@@ -63,6 +97,7 @@ export default function ReportPage() {
       });
       sessionStorage.setItem("hz_report", JSON.stringify(next));
       setReport(next);
+      router.replace(`/report?run=${next.run_id}`, { scroll: false });
       const after = next.summary.risk_adjusted_anv_m;
       const dir =
         after > before ? "up" : after < before ? "down" : "unchanged at";
@@ -79,7 +114,9 @@ export default function ReportPage() {
   if (!report)
     return (
       <div className="mx-auto max-w-3xl px-6 py-24 text-center text-g500">
-        No report in this session.{" "}
+        {notFound
+          ? "That report id was not found (it may have been erased under retention policy). "
+          : "No report in this session. "}{" "}
         <Link href="/diagnostic" className="text-flame underline">
           Run the diagnostic
         </Link>{" "}
@@ -94,9 +131,19 @@ export default function ReportPage() {
   const next = funded.filter((l) => l.quadrant === "Quick Wins / Fill-ins");
   const later = report.levers.filter((l) => l.quadrant === "Park (Data-Blocked)");
   const drivers = [...funded].sort((a, b) => b.anv_m - a.anv_m).slice(0, 3);
+  const modernM =
+    funded.find((l) => l.id === "lever_0_foundation")?.impl_cost_m ?? 0;
 
   return (
     <div className="mx-auto max-w-6xl px-6 pb-24">
+      {busy && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-white/60 backdrop-blur-[2px]">
+          <div className="card flex items-center gap-3 px-6 py-4 shadow-lg">
+            <span className="spinner" />
+            <span className="text-sm font-semibold text-black">Recomputing the plan…</span>
+          </div>
+        </div>
+      )}
       {/* Sticky section nav + controls */}
       <div className="sticky top-[60px] z-40 -mx-6 border-b border-g200 bg-white/95 px-6 py-3 backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -254,6 +301,9 @@ export default function ReportPage() {
           <span><b className="text-g700">Blocked</b> · valuable but the data foundation cannot support it yet</span>
           <span><b className="text-g700">Lower priority</b> · does not earn a place</span>
         </div>
+        <div className="mt-5">
+          <Matrix levers={report.levers} />
+        </div>
         <div className="card mt-4 overflow-x-auto">
           <table className="hz-table">
             <thead>
@@ -394,6 +444,20 @@ export default function ReportPage() {
           </div>
         </div>
 
+        <div className="card mt-4 p-5">
+          <p className="text-[13px] font-bold text-black">
+            Where your budget stands: ${s.committed_m.toFixed(1)}M of ${s.budget_m.toFixed(0)}M committed
+          </p>
+          <div className="mt-3">
+            <Donut
+              leversM={s.committed_m - modernM}
+              modernM={modernM}
+              uncommittedM={s.uncommitted_m}
+              budgetM={s.budget_m}
+            />
+          </div>
+        </div>
+
         <details className="mt-4">
           <summary>
             How the ${d.self_funding.rebuild_cost_m.toFixed(1)}M modernization
@@ -469,6 +533,17 @@ export default function ReportPage() {
           <span className="rounded-full border border-g200 px-3 py-1.5">Scenario · {report.scenario}</span>
           <span className="rounded-full border border-g200 px-3 py-1.5">AI stack · {report.ai_stack}</span>
         </div>
+        {base && (
+          <MemoSection
+            request={{
+              ...base,
+              scenario: report.scenario,
+              ai_stack: report.ai_stack,
+              foundation_decision: report.foundation_decision,
+            }}
+          />
+        )}
+
         <details className="mt-4">
           <summary>What each build cost covers</summary>
           <div className="px-4 pb-4">

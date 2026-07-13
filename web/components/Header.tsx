@@ -14,6 +14,12 @@ export default function Header() {
         </Link>
         <nav className="flex items-center gap-2">
           <Link
+            href="/engagements"
+            className="rounded-full border border-[#2a2a2a] bg-[#161616] px-3 py-1 text-[10.5px] font-semibold uppercase tracking-wider text-[#b5b5b5] transition-colors hover:border-[#3e3e3e] hover:text-[#e0e0e0]"
+          >
+            Engagements
+          </Link>
+          <Link
             href="/diagnostic"
             className="rounded-full border border-[#2a2a2a] bg-[#161616] px-3 py-1 text-[10.5px] font-semibold uppercase tracking-wider text-[#b5b5b5] transition-colors hover:border-[#3e3e3e] hover:text-[#e0e0e0]"
           >

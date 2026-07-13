@@ -107,6 +107,13 @@ class ReportResponse(BaseModel):
     scenario: Scenario
     ai_stack: AiStack
     foundation_decision: bool
+    request: ReportRequest  # echoed so any report is self-describing
+
+
+class MemoResponse(BaseModel):
+    generated: bool          # False = deterministic fallback (no key / failure)
+    paragraphs: list[str]
+    grounded_on: list[str]
 
 
 class ConfigResponse(BaseModel):
