@@ -29,8 +29,8 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.schemas import (ConfigResponse, DiagnosticOut, LeverOut, MemoResponse,
-                         PortfolioSummary, RebuildComponent, ReportRequest,
-                         ReportResponse)
+                         PortfolioSummary, PrefillRequest, PrefillResponse,
+                         RebuildComponent, ReportRequest, ReportResponse)
 from observability import get_logger, setup_observability
 
 setup_observability()
@@ -253,3 +253,23 @@ async def compute_memo(req: ReportRequest) -> MemoResponse:
                                       "event": "api_memo",
                                       "provider": "gemini" if result["generated"] else "fallback"})
     return MemoResponse(**result)
+
+
+@app.post("/api/prefill", response_model=PrefillResponse,
+          dependencies=[Depends(require_token)])
+async def prefill(req: PrefillRequest) -> PrefillResponse:
+    """Grounded web prefill: only facts with a source URL and verbatim quote
+    are returned — never estimates. Runs the same guarded pipeline as the
+    pilot (SSRF-blocked fetches, source-tiered confidence, 24h cache)."""
+    from llm.search_client import extract_company_data
+    result = dict(extract_company_data(req.company_name))
+    log = result.pop("_search_log", {})
+    official = result.pop("company_name", None)
+    fields = {k: v for k, v in result.items() if isinstance(v, dict) and "value" in v}
+    _log.info("prefill served", extra={"company": req.company_name, "event": "api_prefill"})
+    return PrefillResponse(
+        company_name=official if isinstance(official, str) else None,
+        fields=fields,
+        searched=bool(log.get("backend")) and "missing" not in str(log.get("backend", "")),
+        duration_s=float(log.get("duration_s", 0.0)),
+    )

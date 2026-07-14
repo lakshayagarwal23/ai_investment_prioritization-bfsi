@@ -147,3 +147,27 @@ export async function listRuns(): Promise<RunListItem[]> {
   if (!r.ok) throw new Error(`runs failed: ${r.status}`);
   return r.json();
 }
+
+export interface PrefillField {
+  value: string;
+  source_url: string;
+  quote: string;
+  confidence: "High" | "Med" | "Low";
+}
+
+export interface Prefill {
+  company_name: string | null;
+  fields: Record<string, PrefillField>;
+  searched: boolean;
+  duration_s: number;
+}
+
+export async function fetchPrefill(companyName: string): Promise<Prefill> {
+  const r = await fetch(`${API_URL}/api/prefill`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ company_name: companyName }),
+  });
+  if (!r.ok) throw new Error(`prefill failed: ${r.status}`);
+  return r.json();
+}

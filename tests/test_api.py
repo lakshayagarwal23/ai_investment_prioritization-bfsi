@@ -103,3 +103,12 @@ def test_reports_are_rebuildable_by_url(client):
 
     runs = client.get("/api/runs").json()
     assert any(r["run_id"] == first["run_id"] for r in runs)
+
+
+def test_prefill_degrades_honestly_without_key(client, monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    r = client.post("/api/prefill", json={"company_name": "No Key Test Ltd"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["searched"] is False and body["fields"] == {}, \
+        "without a key there must be no retrieval and no pretend results"

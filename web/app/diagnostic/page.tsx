@@ -10,7 +10,9 @@ import { useRouter } from "next/navigation";
 import {
   computeReport,
   fetchConfig,
+  fetchPrefill,
   type Config,
+  type PrefillField,
   type Question,
 } from "@/lib/api";
 
@@ -33,6 +35,50 @@ export default function DiagnosticPage() {
   const [goals, setGoals] = useState<string[]>([]);
   const [budget, setBudget] = useState(100);
   const [answers, setAnswers] = useState<Record<string, number | string>>({});
+  const [provenance, setProvenance] = useState<Record<string, PrefillField>>({});
+  const [searching, setSearching] = useState(false);
+  const [searchNote, setSearchNote] = useState<string | null>(null);
+
+  async function runPrefill() {
+    if (!company.trim()) {
+      setError("Name the firm first, then search public sources for it.");
+      return;
+    }
+    setError(null);
+    setSearching(true);
+    setSearchNote(null);
+    try {
+      const p = await fetchPrefill(company.trim());
+      if (!p.searched) {
+        setSearchNote("No retrieval ran: the engine API has no GEMINI_API_KEY configured. All fields stay manual.");
+      } else {
+        const found = Object.keys(p.fields);
+        if (p.company_name) setCompany(p.company_name);
+        if (found.length) {
+          setAnswers((a) => {
+            const nextA = { ...a };
+            for (const [fid, f] of Object.entries(p.fields)) {
+              const n = Number(f.value);
+              nextA[fid] = Number.isFinite(n) ? n : f.value;
+            }
+            return nextA;
+          });
+          setProvenance(p.fields);
+          setSearchNote(
+            `Found ${found.length} field(s) from public sources in ${p.duration_s.toFixed(0)}s — each is marked below with its source. Everything else stays manual; nothing was estimated.`,
+          );
+        } else {
+          setSearchNote(
+            `Searched public sources in ${p.duration_s.toFixed(0)}s and verified nothing for this firm — all fields stay manual. That is the honest outcome, not a failure.`,
+          );
+        }
+      }
+    } catch (e) {
+      setSearchNote(`Search failed: ${String(e)}`);
+    } finally {
+      setSearching(false);
+    }
+  }
 
   useEffect(() => {
     fetchConfig()
@@ -119,13 +165,31 @@ export default function DiagnosticPage() {
         <h2 className="display text-xl">Firm profile</h2>
         <label className="mt-4 block text-[13px] font-semibold text-black">
           Firm name
-          <input
-            value={company}
-            onChange={(e) => setCompany(e.target.value)}
-            placeholder="e.g. HDFC Asset Management"
-            className="mt-1.5 w-full rounded-md border border-g300 px-3 py-2 text-sm text-black outline-none focus:border-flame"
-          />
+          <div className="mt-1.5 flex gap-2">
+            <input
+              value={company}
+              onChange={(e) => setCompany(e.target.value)}
+              placeholder="e.g. HDFC Asset Management"
+              className="w-full rounded-md border border-g300 px-3 py-2 text-sm text-black outline-none focus:border-flame"
+            />
+            <button
+              onClick={runPrefill}
+              disabled={searching}
+              className="shrink-0 rounded-md border border-flame px-4 py-2 text-[13px] font-semibold text-flame transition-colors hover:bg-flame hover:text-white disabled:opacity-50"
+            >
+              {searching ? "Searching…" : "Search public sources"}
+            </button>
+          </div>
+          <span className="mt-1 block text-[11.5px] font-normal text-g500">
+            Pulls verifiable facts (AUM, volumes) from filings and regulator
+            data — every value arrives with its source and a quote.
+          </span>
         </label>
+        {searchNote && (
+          <p className="mt-3 rounded-md border border-flame/40 bg-flame/5 px-3 py-2 text-[12.5px]">
+            {searchNote}
+          </p>
+        )}
 
         <p className="mt-5 text-[13px] font-semibold text-black">Sector</p>
         <p className="text-xs text-g500">
@@ -198,6 +262,7 @@ export default function DiagnosticPage() {
                 key={q.id}
                 q={q}
                 value={answers[q.id]}
+                provenance={provenance[q.id]}
                 onChange={(v) => setAnswers((a) => ({ ...a, [q.id]: v }))}
               />
             ))}
@@ -222,16 +287,41 @@ export default function DiagnosticPage() {
 function QuestionField({
   q,
   value,
+  provenance,
   onChange,
 }: {
   q: Question;
   value: number | string | undefined;
+  provenance?: PrefillField;
   onChange: (v: number | string) => void;
 }) {
   return (
     <div className="border-t border-g100 pt-4 first:border-t-0 first:pt-0">
-      <p className="text-[13px] font-semibold text-black">{q.question}</p>
+      <p className="text-[13px] font-semibold text-black">
+        {q.question}
+        {provenance && (
+          <span
+            className={`ml-2 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+              provenance.confidence === "High"
+                ? "bg-flame/10 text-flame"
+                : "bg-tangerine/15 text-[#9a6200]"
+            }`}
+          >
+            Pre-filled · {provenance.confidence === "High" ? "verified source" : "please verify"}
+          </span>
+        )}
+      </p>
       {q.help && <p className="mt-0.5 text-xs text-g500">{q.help}</p>}
+      {provenance && (
+        <p className="mt-1 text-[11.5px] text-g500">
+          Source:{" "}
+          <a href={provenance.source_url} target="_blank" rel="noreferrer"
+            className="text-flame underline">
+            {new URL(provenance.source_url).hostname}
+          </a>{" "}
+          — &ldquo;{provenance.quote.slice(0, 140)}&rdquo;
+        </p>
+      )}
 
       {q.type === "categorical" && (
         <div className="mt-2 flex flex-wrap gap-2">

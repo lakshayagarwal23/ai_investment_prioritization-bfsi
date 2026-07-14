@@ -123,3 +123,14 @@ class ConfigResponse(BaseModel):
     ai_stacks: dict[str, dict[str, Any]]
     questions: list[dict[str, Any]]
     engine_version: str
+
+
+class PrefillRequest(BaseModel):
+    company_name: str = Field(min_length=2, max_length=120)
+
+
+class PrefillResponse(BaseModel):
+    company_name: Optional[str] = None   # official name, when a source states it
+    fields: dict[str, dict[str, Any]]    # question id -> {value, source_url, quote, confidence}
+    searched: bool                       # False when no retrieval could run (no key)
+    duration_s: float = 0.0
