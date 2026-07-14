@@ -56,6 +56,7 @@ function ReportInner() {
   const [notFound, setNotFound] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [openWhy, setOpenWhy] = useState<string | null>(null);
 
   // Reports are URLs: prefer the fresh session copy when it matches the
   // run id, otherwise rebuild the report from the audit trail by id.
@@ -129,7 +130,15 @@ function ReportInner() {
   const funded = report.levers.filter((l) => l.budget_approved);
   const now = funded.filter((l) => l.quadrant === "Strategic Bets");
   const next = funded.filter((l) => l.quadrant === "Quick Wins / Fill-ins");
-  const later = report.levers.filter((l) => l.quadrant === "Park (Data-Blocked)");
+  const later = report.levers.filter(
+    (l) => l.quadrant === "Park (Data-Blocked)" && !l.already_implemented,
+  );
+  const covered = report.levers.filter((l) => l.already_implemented);
+  const orderedLevers = [...report.levers].sort((a, b) => {
+    const ra = a.rank ?? (a.already_implemented ? 900 : 500 - a.anv_m);
+    const rb = b.rank ?? (b.already_implemented ? 900 : 500 - b.anv_m);
+    return ra - rb;
+  });
   const drivers = [...funded].sort((a, b) => b.anv_m - a.anv_m).slice(0, 3);
   const modernM =
     funded.find((l) => l.id === "lever_0_foundation")?.impl_cost_m ?? 0;
@@ -204,6 +213,17 @@ function ReportInner() {
             </strong>
             . The remaining ${s.uncommitted_m.toFixed(1)}M stays uncommitted,
             because spending it on weaker cases would destroy value.
+            {s.already_covered_count > 0 && (
+              <>
+                {" "}
+                <strong className="text-black">
+                  {s.already_covered_count} capability
+                  {s.already_covered_count > 1 ? "ies" : "y"} you already run
+                </strong>{" "}
+                {s.already_covered_count > 1 ? "were" : "was"} excluded from
+                this ask rather than re-recommended.
+              </>
+            )}
           </p>
           <div className="mt-7 grid gap-8 md:grid-cols-3">
             <div>
@@ -265,6 +285,7 @@ function ReportInner() {
                 <Row k="Value created per year (before risk discount)" v={`$${s.total_anv_m.toFixed(1)}M`} note="Sum of every funded use case's annual value, itemized below" />
                 <Row k="Risk discount" v={`${s.exec_risk_pct}%`} note="From your governance maturity: weaker governance means more delivery slippage" />
                 <Row k="Value created per year (after discount)" v={`$${s.risk_adjusted_anv_m.toFixed(1)}M`} strong />
+                <Row k="Annual running costs (already deducted)" v={`$${s.funded_run_cost_m.toFixed(1)}M/yr`} note="Model licences, inference and hosting for the funded plan; every value above is net of these" />
                 <Row k="Money in (one-off)" v={`$${s.committed_m.toFixed(1)}M`} note="Every dollar itemized in the foundation section" />
                 <Row k="Earns back its cost in" v={s.payback_months ? `${Math.round(s.payback_months)} months` : "n/a"} note="Value ramps over 3 years (25% / 60% / 100%)" strong />
               </tbody>
@@ -295,6 +316,12 @@ function ReportInner() {
           {s.blocked_anv_m > 0.05 &&
             `; $${s.blocked_anv_m.toFixed(1)}M/yr sits blocked behind the data foundation`}
         </h2>
+        {covered.length > 0 && (
+          <p className="mt-2 rounded-md border border-g200 bg-g100/60 px-3 py-2 text-[12.5px]">
+            <b className="text-g700">Already in place at the firm (excluded from the ask):</b>{" "}
+            {covered.map((l) => l.name).join(" · ")}
+          </p>
+        )}
         <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-g500">
           <span><b className="text-g700">Strategic bet</b> · high value and ready; fund first</span>
           <span><b className="text-g700">Quick win</b> · smaller value, fast to deliver</span>
@@ -308,53 +335,34 @@ function ReportInner() {
           <table className="hz-table">
             <thead>
               <tr>
+                <th className="w-14">Priority</th>
                 <th>AI use case</th>
                 <th>Category</th>
                 <th className="num">Build cost</th>
+                <th className="num">Running cost / yr</th>
                 <th className="num">Annual value</th>
                 <th className="num">Earns it back in</th>
-                <th className="num">Value score</th>
                 <th className="num">Readiness</th>
+                <th className="w-10"></th>
               </tr>
             </thead>
             <tbody>
-              {report.levers.map((l) => (
-                <tr key={l.id} className={l.budget_approved ? "" : "opacity-50"}>
-                  <td className="font-semibold text-black">
-                    {l.name}
-                    {!l.budget_approved && (
-                      <span className="ml-2 rounded bg-g100 px-1.5 py-0.5 text-[10px] font-bold text-g500">
-                        NOT FUNDED
-                      </span>
-                    )}
-                    {l.warning === "REG_CAPPED" && (
-                      <span className="ml-2 text-[11px] font-normal text-tangerine">
-                        value halved until compliance gaps close
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    <span
-                      className={`mr-2 inline-block h-2.5 w-2.5 rounded-full ${
-                        ["Blocked", "Lower priority"].includes(l.quadrant_label)
-                          ? "bg-g300"
-                          : "bg-flame"
-                      }`}
-                    />
-                    {l.quadrant_label}
-                  </td>
-                  <td className="num">${l.impl_cost_m.toFixed(1)}M</td>
-                  <td className="num">${l.anv_m.toFixed(1)}M</td>
-                  <td className="num">
-                    {l.payback_months ? `${Math.round(l.payback_months)} mo` : "n/a"}
-                  </td>
-                  <td className="num">{l.impact}/100</td>
-                  <td className="num">{l.feasibility}/100</td>
-                </tr>
+              {orderedLevers.map((l) => (
+                <ScorecardRow
+                  key={l.id}
+                  l={l}
+                  open={openWhy === l.id}
+                  onToggle={() => setOpenWhy(openWhy === l.id ? null : l.id)}
+                />
               ))}
             </tbody>
           </table>
         </div>
+        <p className="mt-2 text-[12px] text-g500">
+          Every value is net of its annual running cost. Click{" "}
+          <b className="text-g700">Why?</b> on any row for the drivers behind
+          its rank and the industry benchmark it rests on.
+        </p>
       </section>
 
       {/* 3 · Foundation */}
@@ -533,6 +541,39 @@ function ReportInner() {
           <span className="rounded-full border border-g200 px-3 py-1.5">Scenario · {report.scenario}</span>
           <span className="rounded-full border border-g200 px-3 py-1.5">AI stack · {report.ai_stack}</span>
         </div>
+        <div className="card mt-5 p-5">
+          <p className="text-[14px] font-bold text-black">How the ranking works</p>
+          <ol className="mt-2 max-w-3xl list-decimal space-y-1.5 pl-5 text-[13px] leading-relaxed">
+            <li>
+              <b className="text-black">Each use case is valued from your answers</b>: your
+              volumes and rates against peer medians, through published automation
+              benchmarks (BCG 2026, PwC 2025, EY 2026, Jersey Finance 2025, IVP,
+              Coalition Greenwich 2026, Oliver Wyman 2026 — the exact citation sits
+              on every row&apos;s <i>Why?</i>).
+            </li>
+            <li>
+              <b className="text-black">Value is haircut for realism</b>: only 50–75% of
+              modelled value is counted (your scenario), consistent with standard
+              benefits-realisation practice, and each value is net of its annual
+              running cost.
+            </li>
+            <li>
+              <b className="text-black">Use cases are ordered</b> by fit to your stated
+              goals first, then by annual value — and funded in that order while
+              budget remains. That allocation order is the priority number shown.
+            </li>
+            <li>
+              <b className="text-black">Discipline rules</b>: nothing blocked by your data
+              foundation, already live at the firm, loss-making, or non-compliant
+              without mitigation can consume budget.
+            </li>
+          </ol>
+          <p className="mt-2 text-[11.5px] text-g500">
+            Every constant behind these steps is in the assumptions register below;
+            benchmark scopes are replaced by scoped vendor quotes in an engagement.
+          </p>
+        </div>
+
         {base && (
           <MemoSection
             request={{
@@ -611,14 +652,21 @@ function RoadCol({
         {items.map((l) => (
           <div
             key={l.id}
-            className="rounded border-l-[3px] border-flame/60 bg-g100 px-3 py-2"
+            className="flex items-start gap-2.5 rounded border-l-[3px] border-flame/60 bg-g100 px-3 py-2"
           >
-            <p className="text-[13px] font-medium text-black">{l.name}</p>
-            <p className="text-[11.5px] text-g500">
-              {locked
-                ? `Worth $${l.anv_m.toFixed(1)}M per year, locked until the foundation is fixed`
-                : `Costs $${l.impl_cost_m.toFixed(1)}M to build · returns $${l.anv_m.toFixed(1)}M per year`}
-            </p>
+            {l.rank != null && (
+              <span className="display mt-0.5 min-w-7 text-xl leading-none !text-flame">
+                #{l.rank}
+              </span>
+            )}
+            <div>
+              <p className="text-[13px] font-medium text-black">{l.name}</p>
+              <p className="text-[11.5px] text-g500">
+                {locked
+                  ? `Worth $${l.anv_m.toFixed(1)}M per year, locked until the foundation is fixed`
+                  : `Costs $${l.impl_cost_m.toFixed(1)}M to build · returns $${l.anv_m.toFixed(1)}M per year`}
+              </p>
+            </div>
           </div>
         ))}
       </div>
@@ -657,5 +705,101 @@ function Segmented<T extends string>({
         </button>
       ))}
     </div>
+  );
+}
+
+
+function ScorecardRow({
+  l,
+  open,
+  onToggle,
+}: {
+  l: Lever;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const dim = !l.budget_approved && !l.already_implemented;
+  return (
+    <>
+      <tr className={dim ? "opacity-50" : ""}>
+        <td>
+          {l.rank != null ? (
+            <span className="display text-xl !text-flame">#{l.rank}</span>
+          ) : l.already_implemented ? (
+            <span className="text-[11px] font-bold uppercase text-g500">Live</span>
+          ) : (
+            <span className="text-g300">—</span>
+          )}
+        </td>
+        <td className="font-semibold text-black">
+          {l.name}
+          {l.already_implemented && (
+            <span className="ml-2 rounded bg-flame/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-flame">
+              Already live
+            </span>
+          )}
+          {dim && (
+            <span className="ml-2 rounded bg-g100 px-1.5 py-0.5 text-[10px] font-bold text-g500">
+              NOT FUNDED
+            </span>
+          )}
+          {l.warning === "REG_CAPPED" && (
+            <span className="ml-2 text-[11px] font-normal text-tangerine">
+              value halved until compliance gaps close
+            </span>
+          )}
+        </td>
+        <td>
+          <span
+            className={`mr-2 inline-block h-2.5 w-2.5 rounded-full ${
+              l.already_implemented
+                ? "bg-flame/40"
+                : ["Blocked", "Lower priority"].includes(l.quadrant_label)
+                  ? "bg-g300"
+                  : "bg-flame"
+            }`}
+          />
+          {l.quadrant_label}
+        </td>
+        <td className="num">
+          {l.already_implemented ? "—" : `$${l.impl_cost_m.toFixed(1)}M`}
+        </td>
+        <td className="num">
+          {l.already_implemented ? "in run-rate" : `$${l.run_cost_m.toFixed(1)}M`}
+        </td>
+        <td className="num">
+          {l.already_implemented ? "—" : `$${l.anv_m.toFixed(1)}M`}
+        </td>
+        <td className="num">
+          {l.already_implemented
+            ? "—"
+            : l.payback_months
+              ? `${Math.round(l.payback_months)} mo`
+              : "n/a"}
+        </td>
+        <td className="num">{l.feasibility}/100</td>
+        <td>
+          <button
+            onClick={onToggle}
+            className={`rounded border px-2 py-0.5 text-[11px] font-semibold transition-colors ${
+              open
+                ? "border-flame bg-flame text-white"
+                : "border-g300 text-g500 hover:border-flame hover:text-flame"
+            }`}
+          >
+            Why?
+          </button>
+        </td>
+      </tr>
+      {open && (
+        <tr>
+          <td colSpan={9} className="!border-l-2 !border-l-flame bg-flame/[0.03]">
+            <p className="max-w-4xl py-1 text-[12.5px] leading-relaxed text-g700">
+              {l.rationale}
+            </p>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }

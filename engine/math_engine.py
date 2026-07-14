@@ -20,7 +20,7 @@ DESIGN CONTRACT
 
 from __future__ import annotations
 from config.value_pools import (BFSI_LEVERS, CONSTANTS, PLATFORM_GATED_LEVERS, COST_BASIS,
-                                RUN_COSTS, AI_STACKS)
+                                RUN_COSTS, AI_STACKS, DRIVER_LABELS)
 from engine.regulatory import check_regulatory_compliance
 
 # ── Loaded costs and derivation multipliers (auditable in the Appendix) ──────
@@ -428,16 +428,64 @@ def compute_dynamic_impact(lever: dict, answers: dict, primary_goals: list[str])
 # MAIN ENTRY POINT
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _compose_rationale(lever: dict, answers: dict, primary_goals: list[str],
+                       impact: int, feasibility: int, anv: float,
+                       quadrant: str) -> str:
+    """Deterministic, citation-backed explanation of why this lever sits
+    where it sits. Composed only from the inputs that actually drove the
+    scores — nothing narrative, nothing invented."""
+    parts = []
+
+    driver = lever.get("value_driver")
+    if driver and driver["answer_key"] in answers:
+        label = DRIVER_LABELS.get(driver["answer_key"], driver["answer_key"])
+        try:
+            val_txt = f"{float(answers[driver['answer_key']]):g}"
+        except (TypeError, ValueError):
+            val_txt = str(answers[driver["answer_key"]])
+        rel = "sized by" if driver["kind"] == "scale" else "headroom sized by"
+        parts.append(f"value of ${anv/1e6:.1f}M/yr {rel} your {label} of "
+                     f"{val_txt} against a peer median of {driver['typical']:g}")
+    else:
+        parts.append(f"value of ${anv/1e6:.1f}M/yr from the peer-median value pool "
+                     f"(no firm-specific driver answered)")
+
+    feas_bits = []
+    erp = str(answers.get("S1_ERP", "")).lower()
+    if "monolith" in erp:
+        feas_bits.append("a legacy monolith core")
+    elif "cloud-native" in erp:
+        feas_bits.append("a modern core")
+    silos = _f(answers, "S1_SILO", 5.0)
+    feas_bits.append(f"{silos:g} data silos")
+    gov = _f(answers, "S5_GOVERNANCE_SCORE", 50.0)
+    feas_bits.append(f"governance {gov:g}/100")
+    parts.append(f"readiness {feasibility}/100 reflecting {', '.join(feas_bits)}")
+
+    if primary_goals:
+        matched = [g for g in lever.get("goal_alignment", []) if g in primary_goals]
+        parts.append(f"aligned to your stated goal of {matched[0]}" if matched
+                     else "dampened for sitting outside your stated goals")
+
+    if quadrant == "Park (Data-Blocked)":
+        parts.append("held back because the data foundation cannot support it yet")
+
+    return (". ".join(p[0].upper() + p[1:] for p in parts)
+            + f". Benchmark basis: {lever.get('benchmark', 'internal calibration')}.")
+
+
 def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0,
                               primary_goals: list[str] = None,
                               llm_intel: dict | None = None,
                               scenario: str = "base",
                               foundation_decision: bool = False,
-                              ai_stack: str = "Balanced") -> list[dict]:
+                              ai_stack: str = "Balanced",
+                              existing_levers: list[str] | None = None) -> list[dict]:
     """Score all sector-applicable levers, rank by goal alignment then value,
     and allocate the budget greedily to positive-value levers."""
     if primary_goals is None:
         primary_goals = []
+    existing = set(existing_levers or [])
 
     exec_risk = compute_execution_risk(answers)
     sector = answers.get("target_sector", "all")
@@ -448,6 +496,7 @@ def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0,
     haircut = haircuts.get(scenario, 0.60)
     size_mult = compute_size_multiplier(answers)
     stack = AI_STACKS.get(ai_stack, AI_STACKS["Balanced"])
+    stack_mult = stack["run_x"]
 
     scored = []
     for lever in feasible_levers:
@@ -508,10 +557,20 @@ def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0,
         goal_alignment = sum(1.0 for goal in primary_goals
                              if goal in lever.get("goal_alignment", []))
 
+        already = lid in existing
         scored.append({
             "name":        lever["name"],
             "short_name":  lever.get("short_name", lever["name"]),
             "id":          lid,
+            "already_implemented": already,
+            "run_cost":    RUN_COSTS.get(lid, 0.0) * stack_mult,
+            "benchmark":   lever.get("benchmark", ""),
+            "rationale":   ("Already live at the firm, so it is excluded from this "
+                            "investment ask rather than re-recommended. Its running "
+                            "costs sit in the existing cost base, not in this plan.")
+                           if already else
+                           _compose_rationale(lever, answers, primary_goals,
+                                              impact, feasibility, anv, quadrant),
             "impact":      impact,
             "speed":       speed_score,
             "feasibility": feasibility,
@@ -543,6 +602,8 @@ def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0,
     cumulative_cost = 0.0
     budget_limit = budget_usd_m * 1e6
     for s in scored:
+        if s.get("already_implemented"):
+            continue
         if s["anv"] <= 0 or s["warning"] == "COMPUTE_ERROR":
             continue
         if s["quadrant"] not in ("Strategic Bets", "Quick Wins / Fill-ins"):
@@ -550,6 +611,16 @@ def calculate_investment_plan(answers: dict, budget_usd_m: float = 999.0,
         if cumulative_cost + s["impl_cost"] <= budget_limit:
             s["budget_approved"] = True
             cumulative_cost += s["impl_cost"]
+
+    # Explicit priority order: the allocation sequence, stated as #1..#n so
+    # the ranking is prominent, not implicit.
+    rank = 0
+    for s in scored:
+        if s["budget_approved"]:
+            rank += 1
+            s["rank"] = rank
+        else:
+            s["rank"] = None
 
     return scored
 
@@ -575,6 +646,12 @@ def _foundation_lever(answers: dict) -> dict:
         "name":        "Foundation Modernization",
         "short_name":  "Modernization",
         "id":          "lever_0_foundation",
+        "already_implemented": False,
+        "run_cost":    0.0,
+        "benchmark":   "Bottom-up modernization estimate (six-component build)",
+        "rationale":   ("Funded by your decision on the foundation page: its value is "
+                        "the retired maintenance spend, its cost the bottom-up rebuild "
+                        "estimate, and it unblocks the platform-gated use cases."),
         "impact":      90,
         "speed":       20,
         "feasibility": 80,

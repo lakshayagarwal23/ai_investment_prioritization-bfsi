@@ -28,9 +28,10 @@ except ImportError:
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.schemas import (ConfigResponse, DiagnosticOut, LeverOut, MemoResponse,
-                         PortfolioSummary, PrefillRequest, PrefillResponse,
-                         RebuildComponent, ReportRequest, ReportResponse)
+from api.schemas import (ConfigResponse, DiagnosticOut, LeverInfo, LeverOut,
+                         MemoResponse, PortfolioSummary, PrefillRequest,
+                         PrefillResponse, RebuildComponent, ReportRequest,
+                         ReportResponse)
 from observability import get_logger, setup_observability
 
 setup_observability()
@@ -77,8 +78,8 @@ async def health() -> dict:
          dependencies=[Depends(require_token)])
 async def get_config() -> ConfigResponse:
     from config.questions import QUESTIONS
-    from config.value_pools import (AI_STACKS, GOALS, SECTOR_DIV, SECTOR_INS,
-                                    SECTOR_MF)
+    from config.value_pools import (AI_STACKS, BFSI_LEVERS, GOALS, SECTOR_DIV,
+                                    SECTOR_INS, SECTOR_MF)
     from storage.audit import ENGINE_VERSION
     return ConfigResponse(
         sectors=[SECTOR_MF, SECTOR_INS, SECTOR_DIV],
@@ -86,6 +87,10 @@ async def get_config() -> ConfigResponse:
         scenarios=["conservative", "base", "aggressive"],
         ai_stacks=AI_STACKS,
         questions=QUESTIONS,
+        levers=[LeverInfo(id=spec["id"], name=spec["name"],
+                          short_name=spec.get("short_name", spec["name"]),
+                          sectors=spec.get("sectors", ["all"]))
+                for spec in BFSI_LEVERS],
         engine_version=ENGINE_VERSION,
     )
 
@@ -106,13 +111,14 @@ def _compute_response(req: ReportRequest,
     plan = build_investment_plan(
         answers, req.budget_usd_m, req.primary_goals,
         scenario=req.scenario, foundation_decision=req.foundation_decision,
-        ai_stack=req.ai_stack)
+        ai_stack=req.ai_stack, existing_levers=req.existing_lever_ids)
 
     # Diagnostic uses the honest baseline (without the foundation) for
     # blocked value, mirroring the Streamlit foundation page.
     baseline = plan if not req.foundation_decision else build_investment_plan(
         answers, req.budget_usd_m, req.primary_goals,
-        scenario=req.scenario, foundation_decision=False, ai_stack=req.ai_stack)
+        scenario=req.scenario, foundation_decision=False, ai_stack=req.ai_stack,
+        existing_levers=req.existing_lever_ids)
     blocked = [p for p in baseline
                if p["id"] in PLATFORM_GATED_LEVERS
                and p["quadrant"] == "Park (Data-Blocked)" and p["anv"] > 0]
@@ -142,7 +148,8 @@ def _compute_response(req: ReportRequest,
     risk_adj_m = total_anv_m * (1.0 - exec_risk)
     pb = payback_months(total_cost_m * 1e6, risk_adj_m * 1e6)
     blocked_anv_m = sum(p["anv"] for p in plan
-                        if p["quadrant"] == "Park (Data-Blocked)" and p["anv"] > 0) / 1e6
+                        if p["quadrant"] == "Park (Data-Blocked)" and p["anv"] > 0
+                        and not p.get("already_implemented")) / 1e6
 
     summary = PortfolioSummary(
         company_name=req.company_name,
@@ -156,20 +163,29 @@ def _compute_response(req: ReportRequest,
         payback_months=round(pb, 1) if pb < 900 else None,
         funded_count=len(approved),
         blocked_anv_m=round(blocked_anv_m, 2),
+        already_covered_count=sum(1 for p in plan if p.get("already_implemented")),
+        funded_run_cost_m=round(sum(p.get("run_cost", 0.0) for p in approved) / 1e6, 2),
     )
 
     levers = [LeverOut(
         id=p["id"], name=p["name"], short_name=p.get("short_name", p["name"]),
+        rank=p.get("rank"),
         quadrant=p["quadrant"],
-        quadrant_label=QUADRANT_LABELS.get(p["quadrant"], p["quadrant"]),
+        quadrant_label=("Already live" if p.get("already_implemented")
+                        else QUADRANT_LABELS.get(p["quadrant"], p["quadrant"])),
         anv_m=round(p["anv"] / 1e6, 2),
         impl_cost_m=round(p["impl_cost"] / 1e6, 2),
+        run_cost_m=round(p.get("run_cost", 0.0) / 1e6, 2),
         payback_months=p["payback"] if p["payback"] < 900 else None,
         impact=p["impact"], feasibility=p["feasibility"], priority=p["priority"],
-        budget_approved=p["budget_approved"], warning=p.get("warning"),
+        budget_approved=p["budget_approved"],
+        already_implemented=bool(p.get("already_implemented")),
+        warning=p.get("warning"),
         reg_risk=p["reg_status"].get("risk_level", "green"),
         reg_mitigations=list(p["reg_status"].get("mitigations", [])),
         cost_basis=p.get("cost_basis", ""),
+        benchmark=p.get("benchmark", ""),
+        rationale=p.get("rationale", ""),
     ) for p in plan]
 
     est = diag.get("rebuild_estimate") or {"breakdown": []}

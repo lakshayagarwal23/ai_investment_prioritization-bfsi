@@ -75,6 +75,8 @@ QUESTIONS = [
     },
     {
         "id": "S1_KTLO",
+        "bands": [["Under half of IT budget", 40], ["Around 60%", 60],
+                  ["Around three-quarters (peer median)", 72], ["Over 85%", 88]],
         "section": "S1",
         "question": "What percentage of your IT budget is spent just \"keeping the lights on\"?",
         "type": "percentage",
@@ -97,6 +99,8 @@ QUESTIONS = [
     # ─── S2: Front Office ─────────────────────────────────────────────────────
     {
         "id": "S2_ELECTRONIC_FLOW",
+        "bands": [["Under a quarter", 20], ["About half", 50],
+                  ["About 60% (peer median)", 60], ["Mostly digital (80%+)", 85]],
         "section": "S2",
         "question": "What percentage of your customer applications are handled completely digitally?",
         "type": "percentage",
@@ -129,6 +133,8 @@ QUESTIONS = [
     # ─── S3: Middle & Back Office ─────────────────────────────────────────────
     {
         "id": "S3_STP",
+        "bands": [["Below 40%", 35], ["40-60%", 50],
+                  ["60-75% (peer median)", 65], ["75-90%", 82], ["Above 90%", 93]],
         "section": "S3",
         "question": "What percentage of transactions are processed without any human intervention?",
         "type": "percentage",
@@ -161,6 +167,8 @@ QUESTIONS = [
     # ─── S4: Risk & Compliance ────────────────────────────────────────────────
     {
         "id": "S4_AML_FALSE_POS",
+        "bands": [["Under 50%", 40], ["50-70%", 60],
+                  ["70-90% (peer median 85%)", 85], ["Above 90%", 93]],
         "section": "S4",
         "question": "What is your false-positive rate for compliance alerts (e.g., AML/KYC)?",
         "type": "percentage",
@@ -203,6 +211,10 @@ QUESTIONS = [
     },
     {
         "id": "S5_GOVERNANCE_SCORE",
+        "bands": [["Ad hoc - little formal ownership", 25],
+                  ["Developing - partial policies (peer median)", 50],
+                  ["Managed - owned, measured, audited", 70],
+                  ["Advanced - automated lineage and controls", 88]],
         "section": "S5",
         "question": "How would you rate your organization's data governance maturity (0-100)?",
         "type": "percentage",

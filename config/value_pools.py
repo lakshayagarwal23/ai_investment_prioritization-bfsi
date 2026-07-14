@@ -315,6 +315,21 @@ AI_STACKS = {
     },
 }
 
+# Plain-language names for the value-driver inputs, used when composing the
+# per-lever rationale ("sized by your X of Y vs peer median Z").
+DRIVER_LABELS = {
+    "S1_AUM": "assets under management ($B)",
+    "S1_SILO": "count of systems holding the same data",
+    "S2_ELECTRONIC_FLOW": "share of applications handled digitally (%)",
+    "S2_ANNUAL_UNDERWRITING_APPS": "annual policy applications",
+    "S2_QUOTE_TO_BIND_DAYS": "days to onboard a customer",
+    "S3_STP": "straight-through processing rate (%)",
+    "S3_TOTAL_OPS_FTE": "manual back-office headcount",
+    "S3_ANNUAL_CLAIMS": "annual claims volume",
+    "S4_AML_FALSE_POS": "compliance-alert false-positive rate (%)",
+    "S4_REG_MONTHS": "months per regulatory change",
+}
+
 # ── Auditable model constants (surfaced in the Assumptions Appendix) ─────────
 # Loaded FTE costs are India-blended, fully loaded (salary + benefits +
 # overhead + vendor allocation), in USD/year.

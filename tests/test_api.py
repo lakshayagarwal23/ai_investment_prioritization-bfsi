@@ -112,3 +112,26 @@ def test_prefill_degrades_honestly_without_key(client, monkeypatch):
     body = r.json()
     assert body["searched"] is False and body["fields"] == {}, \
         "without a key there must be no retrieval and no pretend results"
+
+
+def test_existing_use_cases_flow_through_the_api(client):
+    r = client.post("/api/report", json={
+        "answers": mf_answers(), "company_name": "Covered Ltd",
+        "target_sector": "Mutual Funds / Asset Management",
+        "existing_lever_ids": ["lever_5"],
+    })
+    assert r.status_code == 200
+    body = r.json()
+    covered = next(x for x in body["levers"] if x["id"] == "lever_5")
+    assert covered["already_implemented"] and covered["quadrant_label"] == "Already live"
+    assert covered["rank"] is None and not covered["budget_approved"]
+    assert body["summary"]["already_covered_count"] == 1
+    funded = [x for x in body["levers"] if x["budget_approved"]]
+    assert [x["rank"] for x in sorted(funded, key=lambda x: x["rank"])] == \
+        list(range(1, len(funded) + 1))
+    assert body["summary"]["funded_run_cost_m"] > 0
+    assert all("Benchmark basis:" in x["rationale"]
+               or x["id"] == "lever_0_foundation" or x["already_implemented"]
+               for x in body["levers"])
+    assert client.post("/api/report",
+                       json={"existing_lever_ids": ["lever_999"]}).status_code == 422

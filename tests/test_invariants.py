@@ -326,3 +326,62 @@ def test_foundation_lever_is_coherent():
     assert fnd["anv"] > 0, "foundation lever must carry its legacy-savings ANV"
     assert fnd["payback"] > 0
     assert fnd["budget_approved"], "foundation must be funded first on a $100M budget"
+
+
+# ── Sales-team feedback: ranks, existing use cases, rationale, run costs ─────
+
+def test_funded_levers_carry_explicit_sequential_ranks():
+    plan = build_investment_plan(mf_answers(), 100.0, [])
+    funded = [p for p in plan if p["budget_approved"]]
+    assert [p["rank"] for p in funded] == list(range(1, len(funded) + 1))
+    assert all(p["rank"] is None for p in plan if not p["budget_approved"])
+
+
+def test_already_implemented_levers_are_never_recommended():
+    """Recommending something the client already runs destroys credibility.
+    Existing levers must be excluded from funding and marked as such."""
+    plan = build_investment_plan(mf_answers(), 100.0, [],
+                                 existing_levers=["lever_5", "lever_1"])
+    by_id = {p["id"]: p for p in plan}
+    for lid in ("lever_5", "lever_1"):
+        assert by_id[lid]["already_implemented"] is True
+        assert by_id[lid]["budget_approved"] is False
+        assert by_id[lid]["rank"] is None
+        assert "Already live" in by_id[lid]["rationale"]
+    # the freed budget flows to the next-best cases, plan still coherent
+    funded = [p for p in plan if p["budget_approved"]]
+    assert funded and all(not p["already_implemented"] for p in funded)
+
+
+def test_every_lever_carries_a_cited_rationale():
+    plan = build_investment_plan(mf_answers(), 100.0, [GOALS[0]])
+    for p in plan:
+        if p["id"] == "lever_0_foundation":
+            continue
+        assert "Benchmark basis:" in p["rationale"], p["id"]
+        assert "readiness" in p["rationale"].lower(), p["id"]
+        assert ("peer median" in p["rationale"].lower()
+                or "value pool" in p["rationale"].lower()), p["id"]
+
+
+def test_run_costs_are_exposed_and_stack_scaled():
+    """Maintenance/run cost must be visible per lever, not silently netted."""
+    from config.value_pools import RUN_COSTS
+    balanced = {p["id"]: p for p in build_investment_plan(mf_answers(), 100.0, [])}
+    frontier = {p["id"]: p for p in
+                build_investment_plan(mf_answers(), 100.0, [], ai_stack="Frontier")}
+    for lid, base_cost in RUN_COSTS.items():
+        if lid in balanced:
+            assert balanced[lid]["run_cost"] == base_cost
+            assert abs(frontier[lid]["run_cost"] - base_cost * 1.30) < 1
+
+
+def test_banded_questions_map_to_calibrated_values():
+    from config.questions import QUESTIONS
+    banded = {q["id"]: q for q in QUESTIONS if "bands" in q}
+    assert {"S1_KTLO", "S3_STP", "S4_AML_FALSE_POS",
+            "S5_GOVERNANCE_SCORE", "S2_ELECTRONIC_FLOW"} <= set(banded)
+    for q in banded.values():
+        values = [v for _, v in q["bands"]]
+        assert all(0 <= v <= 100 for v in values)
+        assert values == sorted(values), f"{q['id']} bands must be ordered"

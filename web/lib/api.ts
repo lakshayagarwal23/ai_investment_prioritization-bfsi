@@ -16,8 +16,16 @@ export interface Question {
   help?: string;
   type: "numeric" | "percentage" | "categorical";
   options?: string[];
+  bands?: [string, number][];
   default?: number | string;
   visible_when?: { sector?: string[] };
+}
+
+export interface LeverInfo {
+  id: string;
+  name: string;
+  short_name: string;
+  sectors: string[];
 }
 
 export interface Config {
@@ -26,6 +34,7 @@ export interface Config {
   scenarios: Scenario[];
   ai_stacks: Record<string, { run_x: number; capability_x: number; desc: string }>;
   questions: Question[];
+  levers: LeverInfo[];
   engine_version: string;
 }
 
@@ -33,19 +42,24 @@ export interface Lever {
   id: string;
   name: string;
   short_name: string;
+  rank: number | null;
   quadrant: string;
   quadrant_label: string;
   anv_m: number;
   impl_cost_m: number;
+  run_cost_m: number;
   payback_months: number | null;
   impact: number;
   feasibility: number;
   priority: string;
   budget_approved: boolean;
+  already_implemented: boolean;
   warning: string | null;
   reg_risk: "green" | "yellow" | "red";
   reg_mitigations: string[];
   cost_basis: string;
+  benchmark: string;
+  rationale: string;
 }
 
 export interface Summary {
@@ -60,6 +74,8 @@ export interface Summary {
   payback_months: number | null;
   funded_count: number;
   blocked_anv_m: number;
+  already_covered_count: number;
+  funded_run_cost_m: number;
 }
 
 export interface Diagnostic {
@@ -118,6 +134,7 @@ export interface ReportRequest {
   scenario: Scenario;
   ai_stack: AiStack;
   foundation_decision: boolean;
+  existing_lever_ids: string[];
 }
 
 export async function fetchConfig(): Promise<Config> {

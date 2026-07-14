@@ -15,6 +15,8 @@ import {
   type PrefillField,
   type Question,
 } from "@/lib/api";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+
 
 const SECTION_TITLES: Record<string, string> = {
   S1: "Technology & data",
@@ -35,6 +37,7 @@ export default function DiagnosticPage() {
   const [goals, setGoals] = useState<string[]>([]);
   const [budget, setBudget] = useState(100);
   const [answers, setAnswers] = useState<Record<string, number | string>>({});
+  const [existingIds, setExistingIds] = useState<string[]>([]);
   const [provenance, setProvenance] = useState<Record<string, PrefillField>>({});
   const [searching, setSearching] = useState(false);
   const [searchNote, setSearchNote] = useState<string | null>(null);
@@ -129,6 +132,7 @@ export default function DiagnosticPage() {
         scenario: "base",
         ai_stack: "Balanced",
         foundation_decision: false,
+        existing_lever_ids: existingIds,
       });
       sessionStorage.setItem("hz_report", JSON.stringify(report));
       router.push(`/report?run=${report.run_id}`);
@@ -252,6 +256,45 @@ export default function DiagnosticPage() {
         </label>
       </section>
 
+      {/* Current AI landscape: what is already live is never re-recommended */}
+      <section className="card mt-6 p-6">
+        <h2 className="display text-xl">Your current AI landscape</h2>
+        <p className="mt-1 text-xs text-g500">
+          Select every capability that is <b>already live in production</b> at
+          the firm. Anything you select is excluded from the investment ask and
+          shown as covered — this tool never recommends what you already run.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {cfg.levers
+            .filter((l) => l.sectors.includes("all") || l.sectors.includes(sector))
+            .map((l) => (
+              <button
+                key={l.id}
+                onClick={() =>
+                  setExistingIds((prev) =>
+                    prev.includes(l.id)
+                      ? prev.filter((x) => x !== l.id)
+                      : [...prev, l.id],
+                  )
+                }
+                className={`rounded-md border px-3 py-1.5 text-[12.5px] transition-colors ${
+                  existingIds.includes(l.id)
+                    ? "border-flame bg-flame/10 font-semibold text-flame"
+                    : "border-g300 text-g700 hover:border-black"
+                }`}
+              >
+                {existingIds.includes(l.id) ? "✓ " : ""}{l.short_name}
+              </button>
+            ))}
+        </div>
+        {existingIds.length > 0 && (
+          <p className="mt-2 text-[12px] text-g500">
+            {existingIds.length} capability(ies) will be marked as already
+            covered in the report.
+          </p>
+        )}
+      </section>
+
       {/* Question sections */}
       {Object.entries(sections).map(([sid, qs]) => (
         <section key={sid} className="card mt-6 p-6">
@@ -295,6 +338,7 @@ function QuestionField({
   provenance?: PrefillField;
   onChange: (v: number | string) => void;
 }) {
+  const [exact, setExact] = useState(false);
   return (
     <div className="border-t border-g100 pt-4 first:border-t-0 first:pt-0">
       <p className="text-[13px] font-semibold text-black">
@@ -341,7 +385,33 @@ function QuestionField({
         </div>
       )}
 
-      {q.type === "percentage" && (
+      {q.type === "percentage" && q.bands && !exact && (
+        <div className="mt-2">
+          <div className="flex flex-wrap gap-2">
+            {q.bands.map(([label, v]) => (
+              <button
+                key={label}
+                onClick={() => onChange(v)}
+                className={`rounded-md border px-3 py-1.5 text-[12.5px] transition-colors ${
+                  Number(value) === v
+                    ? "border-flame bg-flame text-white"
+                    : "border-g300 text-g700 hover:border-black"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setExact(true)}
+            className="mt-1.5 text-[11.5px] text-g500 underline hover:text-flame"
+          >
+            I know the exact figure
+          </button>
+        </div>
+      )}
+
+      {q.type === "percentage" && (!q.bands || exact) && (
         <div className="mt-2 flex items-center gap-4">
           <input
             type="range"
@@ -354,6 +424,14 @@ function QuestionField({
           <span className="display w-14 text-right text-lg">
             {Number(value ?? 50)}%
           </span>
+          {q.bands && (
+            <button
+              onClick={() => setExact(false)}
+              className="text-[11.5px] text-g500 underline hover:text-flame"
+            >
+              back to ranges
+            </button>
+          )}
         </div>
       )}
 

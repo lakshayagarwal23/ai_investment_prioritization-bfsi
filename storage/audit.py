@@ -30,7 +30,7 @@ from observability import get_logger
 
 _log = get_logger("horizon.audit")
 
-ENGINE_VERSION = "5.1.1"   # bump on any formula change (CI enforces this)
+ENGINE_VERSION = "5.2.0"   # bump on any formula change (CI enforces this)
 CORPUS_VERSION = "0.1.0-unverified"  # bump when corpus entries are verified
 
 DB_PATH = Path(os.environ.get(

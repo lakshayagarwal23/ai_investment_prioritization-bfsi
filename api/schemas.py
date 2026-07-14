@@ -25,6 +25,17 @@ class ReportRequest(BaseModel):
     scenario: Scenario = "base"
     ai_stack: AiStack = "Balanced"
     foundation_decision: bool = False
+    existing_lever_ids: list[str] = Field(default_factory=list)
+
+    @field_validator("existing_lever_ids")
+    @classmethod
+    def levers_must_exist(cls, v: list[str]) -> list[str]:
+        from config.value_pools import BFSI_LEVERS
+        known = {spec["id"] for spec in BFSI_LEVERS}
+        unknown = [x for x in v if x not in known]
+        if unknown:
+            raise ValueError(f"unknown lever ids: {unknown}")
+        return v
 
     @field_validator("primary_goals")
     @classmethod
@@ -48,19 +59,24 @@ class LeverOut(BaseModel):
     id: str
     name: str
     short_name: str
+    rank: Optional[int]              # explicit priority order among funded levers
     quadrant: str
     quadrant_label: str
     anv_m: float
     impl_cost_m: float
+    run_cost_m: float                # annual running cost (stack-adjusted)
     payback_months: Optional[float]
     impact: int
     feasibility: int
     priority: str
     budget_approved: bool
+    already_implemented: bool
     warning: Optional[str]
     reg_risk: str
     reg_mitigations: list[str]
     cost_basis: str
+    benchmark: str
+    rationale: str                   # deterministic, citation-backed why
 
 
 class PortfolioSummary(BaseModel):
@@ -75,6 +91,8 @@ class PortfolioSummary(BaseModel):
     payback_months: Optional[float]
     funded_count: int
     blocked_anv_m: float
+    already_covered_count: int
+    funded_run_cost_m: float         # annual running costs already deducted
 
 
 class RebuildComponent(BaseModel):
@@ -116,12 +134,20 @@ class MemoResponse(BaseModel):
     grounded_on: list[str]
 
 
+class LeverInfo(BaseModel):
+    id: str
+    name: str
+    short_name: str
+    sectors: list[str]
+
+
 class ConfigResponse(BaseModel):
     sectors: list[str]
     goals: list[str]
     scenarios: list[str]
     ai_stacks: dict[str, dict[str, Any]]
     questions: list[dict[str, Any]]
+    levers: list[LeverInfo]
     engine_version: str
 
 
